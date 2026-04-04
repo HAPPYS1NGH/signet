@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { DeviceActionStatus } from "@ledgerhq/device-management-kit";
 import { parseEther, type Address, type Hex } from "viem";
+import { getUserOperationTypedData } from "viem/account-abstraction";
 import { useLedger } from "@/lib/ledger";
-import { ETH_PATH } from "@/lib/config";
+import { ETH_PATH, CHAIN_ID, ENTRY_POINT_ADDRESS } from "@/lib/config";
 import {
   buildUserOp,
   estimateGas,
   applyGasEstimate,
-  getUserOpHash,
+  toPackedUserOpForSigning,
   submitUserOp,
   waitForUserOpReceipt,
   type Call,
@@ -51,17 +52,44 @@ export function SendTransaction() {
       const gasEst = await estimateGas(userOp);
       userOp = applyGasEstimate(userOp, gasEst);
 
-      // Sign
+      // Sign — use viem's getUserOperationTypedData for correct EIP-712 hash
       setStep("signing");
-      setUserPrompt("Please confirm the message on your Ledger device.");
+      setUserPrompt("Please confirm on your Ledger device.");
 
-      const opHash = await getUserOpHash(userOp);
+      const strip0x = (h: string) => (h.startsWith("0x") ? h.slice(2) : h);
+
+      // Build the typed data that viem/the JAW SDK would use
+      const packed = toPackedUserOpForSigning(userOp);
+      const typedData = getUserOperationTypedData({
+        chainId: CHAIN_ID,
+        entryPointAddress: ENTRY_POINT_ADDRESS,
+        userOperation: {
+          sender: packed.sender,
+          nonce: packed.nonce,
+          callData: packed.callData,
+          callGasLimit: userOp.callGasLimit,
+          verificationGasLimit: userOp.verificationGasLimit,
+          preVerificationGas: userOp.preVerificationGas,
+          maxFeePerGas: userOp.maxFeePerGas,
+          maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+          signature: userOp.signature,
+          factory: userOp.factory ?? undefined,
+          factoryData: userOp.factoryData ?? undefined,
+          paymaster: userOp.paymaster ?? undefined,
+          paymasterData: userOp.paymasterData ?? undefined,
+          paymasterVerificationGasLimit: userOp.paymasterVerificationGasLimit ?? undefined,
+          paymasterPostOpGasLimit: userOp.paymasterPostOpGasLimit ?? undefined,
+        },
+      });
+
+      console.log("[SendTx] Typed data domain:", typedData.domain);
+
       const sig = await new Promise<{ r: string; s: string; v: number }>((resolve, reject) => {
-        const { observable } = signer.signMessage(ETH_PATH, opHash);
+        const { observable } = signer.signTypedData(ETH_PATH, typedData as unknown as Parameters<typeof signer.signTypedData>[1]);
         observable.subscribe({
           next: (state) => {
             if (state.status === DeviceActionStatus.Completed) {
-              resolve(state.output as unknown as { r: string; s: string; v: number });
+              resolve(state.output as { r: string; s: string; v: number });
             } else if (state.status === DeviceActionStatus.Error) {
               reject(state.error);
             }
@@ -70,8 +98,8 @@ export function SendTransaction() {
         });
       });
 
-      const vHex = (sig.v & 1 ? "1c" : "1b");
-      userOp.signature = `0x${sig.r}${sig.s}${vHex}` as Hex;
+      const vByte = sig.v >= 27 ? sig.v : sig.v + 27;
+      userOp.signature = `0x${strip0x(sig.r)}${strip0x(sig.s)}${vByte.toString(16).padStart(2, "0")}` as Hex;
       setUserPrompt(null);
 
       // Submit

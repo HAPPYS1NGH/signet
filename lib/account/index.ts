@@ -15,6 +15,7 @@ export {
   estimateGas,
   applyGasEstimate,
   getUserOpHash,
+  toPackedUserOpForSigning,
   submitUserOp,
   waitForUserOpReceipt,
 } from "./userOp";

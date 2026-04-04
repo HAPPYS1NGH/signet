@@ -19,8 +19,11 @@ if (!JAW_API_KEY) {
 }
 const JAW_BUNDLER_URL = `${JAW_PROXY_URL}/rpc?chainId=${CHAIN_ID}&api-key=${JAW_API_KEY}`;
 
+// Pimlico for debugging (real error messages)
+const PIMLICO_BUNDLER_URL = "https://api.pimlico.io/v2/84532/rpc?apikey=pim_QEUJGJKNfJtK94AkqQ5jet";
+
 // Switch this to test different bundlers
-export const BUNDLER_URL = JAW_BUNDLER_URL;
+export const BUNDLER_URL = PIMLICO_BUNDLER_URL;
 
 // --- Derivation Path ---
 export const ETH_PATH = "44'/60'/0'/0/6";

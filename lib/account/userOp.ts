@@ -262,6 +262,14 @@ export function getUserOpHash(userOp: UserOp, chainId: number = CHAIN_ID): Hex {
   );
 }
 
+/**
+ * Convert our UserOp to the packed format needed for signing.
+ * Used with viem's getUserOperationTypedData() for Ledger EIP-712 signing.
+ */
+export function toPackedUserOpForSigning(userOp: UserOp) {
+  return toPackedUserOp(userOp);
+}
+
 // --- Submit ---
 
 export async function submitUserOp(
