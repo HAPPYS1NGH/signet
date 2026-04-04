@@ -41,7 +41,6 @@ const CHAIN_ID         = 84532; // Base Sepolia
 const JAW_API_KEY      = process.env.NEXT_PUBLIC_JAW_API_KEY!;
 const SPENDER_PK       = process.env.SPENDER_PRIVATE_KEY as Hex;
 const PERMISSION_ID    = process.env.PERMISSION_ID as Hex;
-const AGENT_ID         = process.env.AGENT_ID!;
 const API_BASE         = process.env.API_BASE ?? "http://localhost:3000";
 
 const RECIPIENT        = (process.env.RECIPIENT ?? "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045") as Address; // vitalik
@@ -57,9 +56,25 @@ const TIMEOUT_MS       = 5 * 60 * 1_000; // 5 minutes
 if (!JAW_API_KEY)   throw new Error("NEXT_PUBLIC_JAW_API_KEY not set");
 if (!SPENDER_PK)    throw new Error("SPENDER_PRIVATE_KEY not set");
 if (!PERMISSION_ID) throw new Error("PERMISSION_ID not set");
-if (!AGENT_ID)      throw new Error("AGENT_ID not set");
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+/** Resolve the DB agentId from the permissionId — no manual input needed */
+async function resolveAgentId(permissionId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/agents?permissionId=${permissionId}`);
+  if (res.status === 404) {
+    throw new Error(
+      `No agent found in DB for permissionId ${permissionId}.\n` +
+      `  → Grant the permission via the webapp first (GrantPermission panel).`,
+    );
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Failed to resolve agentId: ${err.error ?? res.status}`);
+  }
+  const data = await res.json();
+  return data.agent.agentId as string;
+}
 
 type TxStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
 
@@ -137,8 +152,12 @@ async function main() {
   const spenderLocal = privateKeyToAccount(SPENDER_PK);
   console.log("Agent EOA      :", spenderLocal.address);
   console.log("Permission ID  :", PERMISSION_ID);
-  console.log("Agent ID       :", AGENT_ID);
   console.log("API            :", API_BASE);
+
+  // Resolve agentId from DB
+  console.log("Resolving agentId from DB...");
+  const agentId = await resolveAgentId(PERMISSION_ID);
+  console.log("Agent ID       :", agentId, "(resolved ✓)");
 
   const account = await Account.fromLocalAccount(
     { chainId: CHAIN_ID, apiKey: JAW_API_KEY },
@@ -165,7 +184,7 @@ async function main() {
     data: c.data,
   }));
 
-  const postRes = await fetch(`${API_BASE}/api/agents/${AGENT_ID}/tx`, {
+  const postRes = await fetch(`${API_BASE}/api/agents/${agentId}/tx`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
