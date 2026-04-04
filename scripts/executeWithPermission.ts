@@ -47,7 +47,7 @@ async function main() {
 
   // 3. Define the calls to execute using the permission
   //    Example: send 0.0001 ETH to a recipient
-  const RECIPIENT = "0x000000000000000000000000000000000000dEaD" as Address;
+  const RECIPIENT = "0x926a19D7429F9AD47b2cB2b0e5c46A9E69F05a3e" as Address;
   const calls = [
     {
       to: RECIPIENT,

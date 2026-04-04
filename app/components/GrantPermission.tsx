@@ -27,7 +27,11 @@ type Step = "idle" | "building" | "estimating" | "signing" | "submitting" | "wai
 
 const NATIVE_TOKEN = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
-export function GrantPermission() {
+interface GrantPermissionProps {
+  onAgentRegistered?: (agentId: string) => void;
+}
+
+export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}) {
   const { signer, eoaAddress, accountStatus } = useLedger();
 
   // Form state
@@ -44,6 +48,7 @@ export function GrantPermission() {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [permissionId, setPermissionId] = useState<string | null>(null);
+  const [agentId, setAgentId] = useState<string | null>(null);
 
   if (!eoaAddress || !signer || accountStatus !== "ready") return null;
 
@@ -53,6 +58,11 @@ export function GrantPermission() {
     try {
       setError(null);
       setTxHash(null);
+      setAgentId(null);
+
+      console.log("[GrantPermission] Starting grant flow...");
+      console.log("[GrantPermission] Account:", eoaAddress);
+      console.log("[GrantPermission] Spender:", spender);
 
       const params: GrantPermissionParams = {
         spender: spender as Address,
@@ -70,20 +80,30 @@ export function GrantPermission() {
       };
 
       // Build permission struct
+      console.log("[GrantPermission] Building permission struct...");
       const permission = buildPermission(eoaAddress, params);
+      console.log("[GrantPermission] Permission:", JSON.stringify(permission, (_, v) => typeof v === "bigint" ? v.toString() : v, 2));
       const approveCall = buildApproveCall(permission);
+      console.log("[GrantPermission] Approve calldata:", approveCall.data.slice(0, 20) + "...");
 
       // Build UserOp
       setStep("building");
+      console.log("[GrantPermission] Building UserOp...");
       let userOp = await buildUserOp(eoaAddress, [approveCall]);
+
+      console.log("[GrantPermission] UserOp built. Sender:", userOp.sender);
 
       // Estimate gas
       setStep("estimating");
+      console.log("[GrantPermission] Estimating gas...");
       const gasEst = await estimateGas(userOp);
       userOp = applyGasEstimate(userOp, gasEst);
 
+      console.log("[GrantPermission] Gas estimated:", JSON.stringify(gasEst, (_, v) => typeof v === "bigint" ? v.toString() : v));
+
       // Sign with Ledger
       setStep("signing");
+      console.log("[GrantPermission] Requesting Ledger signature...");
 
       const typedData = getUserOperationTypedData({
         chainId: CHAIN_ID,
@@ -126,11 +146,16 @@ export function GrantPermission() {
       const vByte = sig.v >= 27 ? sig.v : sig.v + 27;
       userOp.signature = `0x${strip0x(sig.r)}${strip0x(sig.s)}${vByte.toString(16).padStart(2, "0")}` as Hex;
 
+      console.log("[GrantPermission] Signed! Signature:", userOp.signature.slice(0, 20) + "...");
+
       // Submit
       setStep("submitting");
+      console.log("[GrantPermission] Submitting UserOp...");
       const userOpHash = await submitUserOp(userOp);
+      console.log("[GrantPermission] UserOp hash:", userOpHash);
 
       setStep("waiting");
+      console.log("[GrantPermission] Waiting for receipt...");
       const receipt = await waitForUserOpReceipt(userOpHash);
 
       // Extract permissionId from PermissionApproved event
@@ -141,11 +166,56 @@ export function GrantPermission() {
 
       // Store in JAW relay so wallet_getPermissions can find it
       if (pid) {
+        console.log("[GrantPermission] Storing permission in relay...");
         await storePermissionInRelay(pid, permission).catch((err) =>
           console.warn("[GrantPermission] Relay store error:", err),
         );
+
+        // Register agent in DB with full permission details
+        console.log("[GrantPermission] Registering agent in DB...");
+        try {
+          const regRes = await fetch("/api/agents/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              account: eoaAddress,
+              agentAddress: spender,
+              permissionId: pid,
+              delegationTxHash: receipt?.receipt?.transactionHash ?? null,
+              permission: {
+                account: eoaAddress,
+                spender,
+                start: Math.floor(Date.now() / 1000),
+                end: params.expiry,
+                salt: "0x0", // actual salt is on-chain, this is for reference
+                calls: params.calls.map((c) => ({
+                  target: c.target,
+                  selector: c.selector,
+                  checker: "0x0000000000000000000000000000000000000000",
+                })),
+                spends: params.spends.map((s) => ({
+                  token: s.token,
+                  allowance: s.allowance.toString(),
+                  unit: s.unit,
+                  multiplier: s.multiplier ?? 1,
+                })),
+              },
+            }),
+          });
+          const regData = await regRes.json();
+          if (regRes.ok) {
+            console.log("[GrantPermission] Agent registered! agentId:", regData.agentId);
+            setAgentId(regData.agentId);
+            onAgentRegistered?.(regData.agentId);
+          } else {
+            console.warn("[GrantPermission] Agent registration failed:", regData.error);
+          }
+        } catch (regErr) {
+          console.warn("[GrantPermission] Agent registration error:", regErr);
+        }
       }
 
+      console.log("[GrantPermission] Done!");
       setStep("done");
     } catch (err) {
       console.error("Grant permission error:", err);
@@ -262,6 +332,22 @@ export function GrantPermission() {
       {step === "done" && (
         <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
           <p className="text-sm text-emerald-400">Permission granted!</p>
+          {agentId && (
+            <div className="mt-2">
+              <p className="text-xs text-zinc-500">Agent ID (give this to your agent)</p>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 break-all rounded bg-white/5 px-3 py-2 font-mono text-xs text-amber-400">
+                  {agentId}
+                </code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(agentId)}
+                  className="shrink-0 rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400 hover:bg-white/10"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
           {permissionId && (
             <div className="mt-2">
               <p className="text-xs text-zinc-500">Permission ID</p>
