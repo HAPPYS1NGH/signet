@@ -14,6 +14,7 @@
     "@ledgerhq/device-management-kit": "^1.2.0",
     "@ledgerhq/device-signer-kit-ethereum": "^1.13.0",
     "@ledgerhq/device-transport-kit-web-hid": "^1.2.3",
+    "dotenv": "^17.4.0",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
