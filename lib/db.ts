@@ -67,7 +67,6 @@ export interface AgentDoc {
 export interface TxDoc {
   txId: string;
   agentId: string;
-  permissionId: string;    // which permission authorises these calls
   type: "autonomous" | "signature_request";
   status: "executed" | "pending" | "approved" | "rejected" | "failed";
   calls: { to: string; value: string; data?: string }[];

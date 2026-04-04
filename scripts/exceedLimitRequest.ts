@@ -43,16 +43,10 @@ const SPENDER_PK       = process.env.SPENDER_PRIVATE_KEY as Hex;
 const PERMISSION_ID    = process.env.PERMISSION_ID as Hex;
 const API_BASE         = process.env.API_BASE ?? "http://localhost:3000";
 
-// The smart account address (EIP-7702 account that owns the permission)
-const SMART_ACCOUNT    = (process.env.SMART_ACCOUNT ?? "0xCC2c2DEeb1327Ecd6d98EB052414132F136092f6") as Address;
-
-// The call the agent wants to make — must match what's in the permission's call spec
-// target + selector from the granted permission
-const CALL_TARGET      = (process.env.CALL_TARGET   ?? "0x3232323232323232323232323232323232323232") as Address;
-const CALL_SELECTOR    = (process.env.CALL_SELECTOR  ?? "0xe0e0e0e0") as Hex;
-
-// Amount EXCEEDS the agent's autonomous spend limit — that's why it needs approval
-const AMOUNT_ETH       = process.env.AMOUNT_ETH ?? "0.05"; // above the 0.01 ETH/day limit
+// This amount should be ABOVE the permission's spend limit so the agent
+// cannot self-execute — requires owner approval via Ledger.
+const RECIPIENT        = (process.env.RECIPIENT ?? "0x15413cd3Bb0d8BCB88a70aE3679f68Dd7E5194Fb") as Address;
+const AMOUNT_ETH       = process.env.AMOUNT_ETH ?? "0.05"; // ← above the typical 0.01 ETH/day limit
 
 // Poll config
 const POLL_INTERVAL_MS = 3_000;
@@ -173,14 +167,14 @@ async function main() {
   // Show why this needs approval
   console.log("\n─────────────────────────────────────────────");
   console.log("  ⚠  EXCEEDS AUTONOMOUS LIMIT");
-  console.log(`  Requested : ${AMOUNT_ETH} ETH  →  ${CALL_TARGET.slice(0, 14)}...`);
+  console.log(`  Requested : ${AMOUNT_ETH} ETH  →  ${RECIPIENT.slice(0, 14)}...`);
   console.log("  Reason    : Amount is above the agent's permission spend limit.");
   console.log("  Action    : Escalating to owner for manual Ledger approval.");
   console.log("─────────────────────────────────────────────");
 
   // Build the description shown in the webapp approval card
   const description =
-    `⚠ Over-limit transfer: ${AMOUNT_ETH} ETH → ${CALL_TARGET.slice(0, 14)}... ` +
+    `⚠ Over-limit transfer: ${AMOUNT_ETH} ETH → ${RECIPIENT.slice(0, 14)}... ` +
     `(exceeds autonomous spend limit of ${spendLimit})`;
 
   // Post the signature_request to the DB
@@ -192,9 +186,9 @@ async function main() {
       type: "signature_request",
       calls: [
         {
-          to: CALL_TARGET,
+          to: RECIPIENT,
           value: amount.toString(),
-          data: CALL_SELECTOR,
+          data: "0x",
         },
       ],
       description,

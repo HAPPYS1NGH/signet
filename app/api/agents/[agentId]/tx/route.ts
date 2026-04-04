@@ -40,7 +40,6 @@ export async function POST(
     const doc: TxDoc = {
       txId,
       agentId,
-      permissionId: agent.permissionId,   // pulled from the agent record
       type,
       status: type === "autonomous" ? "executed" : "pending",
       calls,

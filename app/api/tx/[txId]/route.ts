@@ -18,11 +18,7 @@ export async function GET(
 
     return Response.json({
       txId: tx.txId,
-      agentId: tx.agentId,
-      permissionId: tx.permissionId,
       status: tx.status,
-      calls: tx.calls,
-      description: tx.description,
       signature: tx.signature,
       userOpHash: tx.userOpHash,
       txHash: tx.txHash,
