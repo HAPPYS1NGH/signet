@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DeviceActionStatus } from "@ledgerhq/device-management-kit";
-import { type Address, type Hex, formatEther } from "viem";
+import { type Address, type Hex, formatEther, encodeFunctionData } from "viem";
 import { getUserOperationTypedData } from "viem/account-abstraction";
 import { useLedger } from "@/lib/ledger";
-import { ETH_PATH, CHAIN_ID, ENTRY_POINT_ADDRESS } from "@/lib/config";
+import { ETH_PATH, CHAIN_ID, ENTRY_POINT_ADDRESS, PERMISSIONS_MANAGER } from "@/lib/config";
 import {
   buildUserOp,
   estimateGas,
@@ -14,6 +14,7 @@ import {
   submitUserOp,
   waitForUserOpReceipt,
 } from "@/lib/account/userOp";
+import { permissionsManagerAbi } from "@/lib/abi/permissionsManager";
 
 interface AgentRecord {
   agentId: string;
@@ -24,15 +25,18 @@ interface AgentRecord {
   status: "active" | "revoked";
   createdAt: string;
   permission: {
+    start: number;
     end: number;
-    spends: { token: string; allowance: string; unit: string }[];
-    calls: { target: string; selector: string }[];
+    salt: string;
+    spends: { token: string; allowance: string; unit: string; multiplier: number }[];
+    calls: { target: string; selector: string; checker?: string }[];
   };
 }
 
 interface TxRecord {
   txId: string;
   agentId: string;
+  permissionId: string;
   type: "autonomous" | "signature_request";
   status: "executed" | "pending" | "approved" | "rejected" | "failed";
   calls: { to: string; value: string; data?: string }[];
@@ -121,14 +125,55 @@ export function AgentActivity() {
       setSigningTxId(tx.txId);
       setError(null);
 
-      const calls = tx.calls.map((c) => ({
+      // Find the agent doc so we can get the full permission struct
+      const agentDoc = agents.find((a) => a.agentId === tx.agentId);
+      if (!agentDoc) throw new Error("Agent not found — cannot build permission calldata");
+
+      // Re-assemble the permission struct the same way GrantPermission does.
+      // The permission must match exactly what was approved on-chain.
+      const permission = {
+        account: agentDoc.account as Address,
+        spender: agentDoc.agentAddress as Address,
+        start: agentDoc.permission.start,
+        end: agentDoc.permission.end,
+        salt: BigInt(agentDoc.permission.salt),
+        calls: agentDoc.permission.calls.map((c) => ({
+          target: c.target as Address,
+          selector: c.selector as Hex,
+          checker: ("checker" in c ? c.checker : "0x0000000000000000000000000000000000000000") as Address,
+        })),
+        spends: agentDoc.permission.spends.map((s) => ({
+          token: s.token as Address,
+          allowance: BigInt(s.allowance),
+          unit: Number(s.unit) as unknown as number,
+          multiplier: s.multiplier ?? 1,
+        })),
+      };
+
+      // Build the calls the agent wants to execute
+      const pmCalls = tx.calls.map((c) => ({
         target: c.to as Address,
         value: BigInt(c.value),
         data: (c.data || "0x") as Hex,
       }));
 
+      // Encode PermissionsManager.executeBatch(permission, calls)
+      // This is the ONLY valid execution path through the smart account
+      const executeBatchData = encodeFunctionData({
+        abi: permissionsManagerAbi,
+        functionName: "executeBatch",
+        args: [permission, pmCalls],
+      });
+
+      // The UserOp calls: smart_account.execute(PERMISSIONS_MANAGER, 0, executeBatch(...))
+      const outerCalls = [{
+        target: PERMISSIONS_MANAGER as Address,
+        value: 0n,
+        data: executeBatchData,
+      }];
+
       setSigningStep("Building UserOp...");
-      let userOp = await buildUserOp(eoaAddress, calls);
+      let userOp = await buildUserOp(eoaAddress, outerCalls);
 
       setSigningStep("Estimating gas...");
       const gasEst = await estimateGas(userOp);
@@ -177,14 +222,14 @@ export function AgentActivity() {
       const vByte = sig.v >= 27 ? sig.v : sig.v + 27;
       userOp.signature = `0x${strip0x(sig.r)}${strip0x(sig.s)}${vByte.toString(16).padStart(2, "0")}` as Hex;
 
-      setSigningStep("Submitting to ledger...");
+      setSigningStep("Submitting to bundler...");
       const userOpHash = await submitUserOp(userOp);
 
       setSigningStep("Waiting for confirmation...");
       const receipt = await waitForUserOpReceipt(userOpHash);
       const txHash = receipt?.receipt?.transactionHash ?? userOpHash;
 
-      // Mark approved in DB
+      // Write result back to DB
       await fetch(`/api/tx/${tx.txId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
