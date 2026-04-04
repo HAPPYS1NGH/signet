@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #f0ece4;
+  --accent: #e8520e;
+  --accent-light: #ff8c42;
+  --muted: #6b6560;
+  --surface: #0a0a0a;
+  --rule: #1a1816;
 }
 
 @theme inline {
@@ -12,15 +17,104 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* ── Texture layers ── */
+
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(240, 236, 228, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 236, 228, 0.018) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+/* ── Marquee ── */
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  animation: marquee 30s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* ── Page load reveal ── */
+
+@keyframes revealUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes revealFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sealReveal {
+  from {
+    opacity: 0;
+    transform: scale(0.85) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.reveal-up {
+  opacity: 0;
+  animation: revealUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.reveal-fade {
+  opacity: 0;
+  animation: revealFade 0.8s ease-out forwards;
+}
+
+.seal-reveal {
+  opacity: 0;
+  animation: sealReveal 1.4s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+}
+
+.spin-slow {
+  animation: spinSlow 60s linear infinite;
+}
+
+/* ── Selection ── */
+
+::selection {
+  background: rgba(232, 82, 14, 0.3);
+  color: #f0ece4;
 }
