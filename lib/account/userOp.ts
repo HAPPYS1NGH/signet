@@ -284,10 +284,11 @@ export async function waitForUserOpReceipt(
   userOpHash: Hex,
   maxAttempts = 30,
   intervalMs = 2000,
-): Promise<unknown> {
+): Promise<{ receipt: { transactionHash: Hex; logs: Array<{ address: string; topics: string[]; data: string }> } }> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const receipt = await bundlerRpc("eth_getUserOperationReceipt", [userOpHash]);
+      const receipt = await bundlerRpc("eth_getUserOperationReceipt", [userOpHash]) as
+        { receipt: { transactionHash: Hex; logs: Array<{ address: string; topics: string[]; data: string }> } } | null;
       if (receipt) return receipt;
     } catch {
       // Not ready yet

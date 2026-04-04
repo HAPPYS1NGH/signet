@@ -6,6 +6,7 @@ import { DeviceInfo } from "./DeviceInfo";
 import { AccountStatusCard } from "./AccountStatus";
 import { DelegationFlow } from "./DelegationFlow";
 import { SendTransaction } from "./SendTransaction";
+import { GrantPermission } from "./GrantPermission";
 
 function DashboardContent() {
   const { accountStatus } = useLedger();
@@ -17,6 +18,7 @@ function DashboardContent() {
       <AccountStatusCard status={accountStatus} />
       <DelegationFlow />
       <SendTransaction />
+      <GrantPermission />
     </div>
   );
 }

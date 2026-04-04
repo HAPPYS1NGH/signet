@@ -19,3 +19,14 @@ export {
   submitUserOp,
   waitForUserOpReceipt,
 } from "./userOp";
+export {
+  type Permission,
+  type GrantPermissionParams,
+  type SpendPeriod,
+  buildPermission,
+  buildApproveCall,
+  buildRevokeCall,
+  encodeApprovePermission,
+  encodeRevokePermission,
+  extractPermissionId,
+} from "./permissions";

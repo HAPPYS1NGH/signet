@@ -19,7 +19,7 @@ const permissionComponents = [
     type: "tuple[]",
     components: [
       { name: "token", type: "address" },
-      { name: "allowance", type: "uint256" },
+      { name: "allowance", type: "uint160" },
       { name: "unit", type: "uint8" },
       { name: "multiplier", type: "uint16" },
     ],
@@ -32,7 +32,19 @@ const callComponents = [
   { name: "data", type: "bytes" },
 ] as const;
 
+// Permission struct type used in the event
+const eventPermissionComponents = [...permissionComponents];
+
 export const permissionsManagerAbi = [
+  {
+    type: "event",
+    name: "PermissionApproved",
+    anonymous: false,
+    inputs: [
+      { name: "permissionHash", type: "bytes32", indexed: true },
+      { name: "permission", type: "tuple", indexed: false, components: permissionComponents },
+    ],
+  },
   {
     type: "function",
     name: "approve",
