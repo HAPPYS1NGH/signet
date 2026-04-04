@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@jaw.id/core": "^0.2.0",
     "@ledgerhq/context-module": "^1.15.0",
     "@ledgerhq/device-management-kit": "^1.2.0",
     "@ledgerhq/device-signer-kit-ethereum": "^1.13.0",

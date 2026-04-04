@@ -21,7 +21,7 @@ import type { Address } from "viem";
 
 import { dmk } from "./dmk";
 import { ETH_PATH } from "../config";
-import { isDelegated, isInitialized } from "../account/delegation";
+import { isDelegated, isPmOwner } from "../account/delegation";
 import type { ConnectionStatus, AccountStatus, LedgerContextValue } from "./types";
 
 export const LedgerContext = createContext<LedgerContextValue | null>(null);
@@ -74,8 +74,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         setAccountStatus("not_delegated");
         return;
       }
-      const initialized = await isInitialized(eoaAddress);
-      setAccountStatus(initialized ? "ready" : "delegated_not_initialized");
+      const pmOwner = await isPmOwner(eoaAddress);
+      setAccountStatus(pmOwner ? "ready" : "delegated_not_initialized");
     } catch (err) {
       console.error("Account status check error:", err);
       setAccountStatus("not_delegated");

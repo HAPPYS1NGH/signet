@@ -23,7 +23,7 @@ const JAW_BUNDLER_URL = `${JAW_PROXY_URL}/rpc?chainId=${CHAIN_ID}&api-key=${JAW_
 export const BUNDLER_URL = JAW_BUNDLER_URL;
 
 // --- Derivation Path ---
-export const ETH_PATH = "44'/60'/0'/0/3";
+export const ETH_PATH = "44'/60'/0'/0/6";
 
 // --- EIP-7702 Stub Signature (for gas estimation) ---
 export const STUB_SIGNATURE =

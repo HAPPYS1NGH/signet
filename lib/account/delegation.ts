@@ -1,11 +1,12 @@
 import {
   type Address,
   type Hex,
+  encodeFunctionData,
   serializeTransaction,
   hexToBytes,
 } from "viem";
 import { publicClient } from "../clients";
-import { CHAIN_ID, JUSTAN_ACCOUNT_IMPL } from "../config";
+import { CHAIN_ID, JUSTAN_ACCOUNT_IMPL, PERMISSIONS_MANAGER } from "../config";
 import { justanAccountAbi } from "../abi/justanAccount";
 
 /**
@@ -33,9 +34,27 @@ export async function isInitialized(address: Address): Promise<boolean> {
 }
 
 /**
- * Build an unsigned EIP-7702 (type 4) delegation-only transaction.
- * NO calldata — just sets the delegation code on the EOA.
- * Initialization happens separately via UserOp through the EntryPoint.
+ * Check if the Permissions Manager is already an owner.
+ */
+export async function isPmOwner(address: Address): Promise<boolean> {
+  try {
+    return await publicClient.readContract({
+      address,
+      abi: justanAccountAbi,
+      functionName: "isOwnerAddress",
+      args: [PERMISSIONS_MANAGER],
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build an unsigned EIP-7702 (type 4) delegation transaction.
+ * Sets the delegation AND adds the Permissions Manager as owner in one tx.
+ *
+ * calldata = addOwnerAddress(PERMISSIONS_MANAGER)
+ * The self-call passes the onlyOwner check (msg.sender == address(this)).
  */
 export async function buildDelegationTx(
   eoaAddress: Address,
@@ -44,26 +63,31 @@ export async function buildDelegationTx(
   const nonce = await publicClient.getTransactionCount({ address: eoaAddress });
   const feeData = await publicClient.estimateFeesPerGas();
 
+  // Add Permissions Manager as owner via self-call
+  const calldata = encodeFunctionData({
+    abi: justanAccountAbi,
+    functionName: "addOwnerAddress",
+    args: [PERMISSIONS_MANAGER],
+  });
+
   const tx = {
     type: "eip7702" as const,
     chainId: CHAIN_ID,
     nonce,
-    to: eoaAddress,
+    to: eoaAddress,       // self-call: msg.sender == address(this)
     value: 0n,
-    data: "0x" as Hex,            // no calldata — delegation only
+    data: calldata,       // addOwnerAddress(PM)
     maxFeePerGas: feeData.maxFeePerGas ?? 1_000_000_000n,
     maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? 1_000_000n,
-    gas: 100_000n,
+    gas: 200_000n,        // delegation + owner addition
     authorizationList: [signedAuth],
   };
 
   const serializedUnsigned = serializeTransaction(tx);
   const unsignedBytes = hexToBytes(serializedUnsigned);
 
-  console.log("[delegation] Built type 4 tx (delegation only):", {
-    nonce,
-    to: eoaAddress,
-    authNonce: signedAuth.nonce,
+  console.log("[delegation] Built type 4 tx:", {
+    nonce, to: eoaAddress, fn: "addOwnerAddress(PM)", authNonce: signedAuth.nonce,
   });
 
   return { tx, unsignedBytes };
@@ -85,7 +109,6 @@ export async function broadcastDelegationTx(
     yParity,
   });
 
-  console.log("[delegation] Broadcasting signed tx...");
   return publicClient.request({
     method: "eth_sendRawTransaction",
     params: [signedTx],
@@ -93,27 +116,26 @@ export async function broadcastDelegationTx(
 }
 
 /**
- * Wait for tx confirmation and verify delegation was set.
- * Retries getCode a few times to handle RPC propagation delay.
+ * Wait for tx confirmation and verify delegation + PM owner.
  */
 export async function waitAndVerify(hash: Hex, eoaAddress: Address) {
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   console.log("[delegation] Tx status:", receipt.status, "block:", receipt.blockNumber);
 
-  // Retry getCode — RPC nodes may need a moment to reflect the delegation
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = await publicClient.getCode({ address: eoaAddress });
     const delegated = code?.startsWith("0xef0100") ?? false;
     console.log(`[delegation] getCode attempt ${attempt + 1}:`, code?.slice(0, 50) ?? "empty");
 
     if (delegated) {
-      return { delegated: true, receipt };
+      const pmIsOwner = await isPmOwner(eoaAddress).catch(() => false);
+      console.log("[delegation] PM is owner:", pmIsOwner);
+      return { delegated: true, pmIsOwner, receipt };
     }
 
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  // If still not set, warn but don't block — let the UserOp step surface the real error
-  console.warn("[delegation] Code not detected after retries. Proceeding anyway.");
-  return { delegated: false, receipt };
+  console.warn("[delegation] Code not detected after retries.");
+  return { delegated: false, pmIsOwner: false, receipt };
 }

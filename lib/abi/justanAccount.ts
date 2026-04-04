@@ -1,6 +1,20 @@
 export const justanAccountAbi = [
   {
     type: "function",
+    name: "addOwnerAddress",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "isOwnerAddress",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "execute",
     inputs: [
       { name: "target", type: "address" },

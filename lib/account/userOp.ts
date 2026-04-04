@@ -9,10 +9,12 @@ import {
 } from "viem";
 import { justanAccountAbi } from "../abi/justanAccount";
 import { entryPointAbi } from "../abi/entryPoint";
+import { factoryAbi } from "../abi/factory";
 import { publicClient, bundlerRpc } from "../clients";
 import {
   CHAIN_ID,
   ENTRY_POINT_ADDRESS,
+  FACTORY_ADDRESS,
   PERMISSIONS_MANAGER,
   STUB_SIGNATURE,
 } from "../config";
@@ -86,10 +88,38 @@ export function encodeInitialize(eoaAddress: Address): Call {
 }
 
 /**
+ * Get factory + factoryData for the initialize UserOp.
+ * The factory calls createAccount which internally calls initialize.
+ * Required because initialize has access control (only callable by factory).
+ */
+export function getInitFactoryArgs(eoaAddress: Address): { factory: Address; factoryData: Hex } {
+  return {
+    factory: FACTORY_ADDRESS,
+    factoryData: encodeFunctionData({
+      abi: factoryAbi,
+      functionName: "createAccount",
+      args: [
+        [pad(eoaAddress), pad(PERMISSIONS_MANAGER)],
+        0n,
+      ],
+    }),
+  };
+}
+
+/**
  * Encode calls into callData for the smart account.
  * Uses execute() for single calls, executeBatch() for multiple.
  */
 export function encodeCallData(calls: Call[]): Hex {
+  if (calls.length === 0) {
+    // No calls — used when factory handles initialization.
+    // Still need valid callData; use empty executeBatch.
+    return encodeFunctionData({
+      abi: justanAccountAbi,
+      functionName: "executeBatch",
+      args: [[]],
+    });
+  }
   if (calls.length === 1) {
     return encodeFunctionData({
       abi: justanAccountAbi,
@@ -124,7 +154,7 @@ export async function getAccountNonce(sender: Address): Promise<bigint> {
 export async function buildUserOp(
   sender: Address,
   calls: Call[],
-  isEip7702 = false,
+  factoryArgs?: { factory: Address; factoryData: Hex },
 ): Promise<UserOp> {
   const nonce = await getAccountNonce(sender);
   const callData = encodeCallData(calls);
@@ -136,9 +166,8 @@ export async function buildUserOp(
   return {
     sender,
     nonce,
-    // EIP-7702: factory = 0x7702 tells bundler to apply the authorization
-    factory: isEip7702 ? ("0x7702" as Address) : null,
-    factoryData: isEip7702 ? "0x" : null,
+    factory: factoryArgs?.factory ?? null,
+    factoryData: factoryArgs?.factoryData ?? null,
     callData,
     callGasLimit: 500_000n,           // placeholder, overwritten by estimation
     verificationGasLimit: 500_000n,   // placeholder
