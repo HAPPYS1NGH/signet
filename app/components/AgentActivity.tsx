@@ -134,9 +134,9 @@ export function AgentActivity() {
       const permission = {
         account: agentDoc.account as Address,
         spender: agentDoc.agentAddress as Address,
-        start: agentDoc.permission.start,
-        end: agentDoc.permission.end,
-        salt: BigInt(agentDoc.permission.salt),
+        start: agentDoc.permission.start || 0,
+        end: agentDoc.permission.end || 0,
+        salt: BigInt(agentDoc.permission.salt || "0x0"),
         calls: agentDoc.permission.calls.map((c) => ({
           target: c.target as Address,
           selector: c.selector as Hex,
@@ -144,9 +144,9 @@ export function AgentActivity() {
         })),
         spends: agentDoc.permission.spends.map((s) => ({
           token: s.token as Address,
-          allowance: BigInt(s.allowance),
-          unit: Number(s.unit) as unknown as number,
-          multiplier: s.multiplier ?? 1,
+          allowance: BigInt(s.allowance || "0"),
+          unit: (Number(s.unit) || 0) as unknown as number,
+          multiplier: s.multiplier || 1,
         })),
       };
 
