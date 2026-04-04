@@ -26,6 +26,25 @@ import {
 type Step = "idle" | "building" | "estimating" | "signing" | "submitting" | "waiting" | "done" | "error";
 
 const NATIVE_TOKEN = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+const ANY_TARGET = "0x3232323232323232323232323232323232323232";
+const ANY_FN_SEL = "0x32323232";
+const EMPTY_CALLDATA_FN_SEL = "0xe0e0e0e0";
+
+const TARGET_PRESETS = [
+  { label: "Custom", value: "" },
+  { label: "Any Contract (Wildcard)", value: ANY_TARGET },
+] as const;
+
+const SELECTOR_PRESETS = [
+  { label: "Custom", value: "" },
+  { label: "Any Function (Wildcard)", value: ANY_FN_SEL },
+  { label: "Empty Calldata", value: EMPTY_CALLDATA_FN_SEL },
+] as const;
+
+const TOKEN_PRESETS = [
+  { label: "Native ETH", value: NATIVE_TOKEN },
+  { label: "Custom Token", value: "" },
+] as const;
 
 interface GrantPermissionProps {
   onAgentRegistered?: (agentId: string) => void;
@@ -37,9 +56,12 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
   // Form state
   const [spender, setSpender] = useState("");
   const [expiryHours, setExpiryHours] = useState("24");
-  const [callTarget, setCallTarget] = useState("");
-  const [callSelector, setCallSelector] = useState("");
-  const [spendToken, setSpendToken] = useState(NATIVE_TOKEN);
+  const [callTargetPreset, setCallTargetPreset] = useState("");
+  const [callTargetCustom, setCallTargetCustom] = useState("");
+  const [callSelectorPreset, setCallSelectorPreset] = useState("");
+  const [callSelectorCustom, setCallSelectorCustom] = useState("");
+  const [spendTokenPreset, setSpendTokenPreset] = useState(NATIVE_TOKEN);
+  const [spendTokenCustom, setSpendTokenCustom] = useState("");
   const [spendAllowance, setSpendAllowance] = useState("0.01");
   const [spendPeriod, setSpendPeriod] = useState<SpendPeriod>("day");
 
@@ -63,6 +85,10 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
       console.log("[GrantPermission] Starting grant flow...");
       console.log("[GrantPermission] Account:", eoaAddress);
       console.log("[GrantPermission] Spender:", spender);
+
+      const callTarget = callTargetPreset || callTargetCustom;
+      const callSelector = callSelectorPreset || callSelectorCustom;
+      const spendToken = spendTokenPreset || spendTokenCustom;
 
       const params: GrantPermissionParams = {
         spender: spender as Address,
@@ -255,20 +281,52 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
         <div className="border-t border-white/5 pt-3">
           <p className="mb-2 text-xs font-medium text-zinc-400">Call Permission (optional)</p>
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              value={callTarget}
-              onChange={(e) => setCallTarget(e.target.value)}
-              placeholder="Target contract"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
-            />
-            <input
-              type="text"
-              value={callSelector}
-              onChange={(e) => setCallSelector(e.target.value)}
-              placeholder="Selector (0xa9059cbb)"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
-            />
+            <div className="flex flex-col gap-1">
+              <select
+                value={callTargetPreset}
+                onChange={(e) => {
+                  setCallTargetPreset(e.target.value);
+                  if (e.target.value) setCallTargetCustom("");
+                }}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+              >
+                {TARGET_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              {!callTargetPreset && (
+                <input
+                  type="text"
+                  value={callTargetCustom}
+                  onChange={(e) => setCallTargetCustom(e.target.value)}
+                  placeholder="0x... target contract"
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <select
+                value={callSelectorPreset}
+                onChange={(e) => {
+                  setCallSelectorPreset(e.target.value);
+                  if (e.target.value) setCallSelectorCustom("");
+                }}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+              >
+                {SELECTOR_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              {!callSelectorPreset && (
+                <input
+                  type="text"
+                  value={callSelectorCustom}
+                  onChange={(e) => setCallSelectorCustom(e.target.value)}
+                  placeholder="0xa9059cbb"
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -294,13 +352,29 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
               <option value="month">Per Month</option>
               <option value="forever">Forever</option>
             </select>
-            <input
-              type="text"
-              value={spendToken}
-              onChange={(e) => setSpendToken(e.target.value)}
-              placeholder="Token address"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
-            />
+            <div className="flex flex-col gap-1">
+              <select
+                value={spendTokenPreset}
+                onChange={(e) => {
+                  setSpendTokenPreset(e.target.value);
+                  if (e.target.value) setSpendTokenCustom("");
+                }}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+              >
+                {TOKEN_PRESETS.map((p) => (
+                  <option key={p.value || "custom"} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+              {!spendTokenPreset && (
+                <input
+                  type="text"
+                  value={spendTokenCustom}
+                  onChange={(e) => setSpendTokenCustom(e.target.value)}
+                  placeholder="0x... token address"
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
