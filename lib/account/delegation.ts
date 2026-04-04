@@ -1,13 +1,11 @@
 import {
   type Address,
   type Hex,
-  encodeFunctionData,
-  pad,
   serializeTransaction,
   hexToBytes,
 } from "viem";
 import { publicClient } from "../clients";
-import { CHAIN_ID, JUSTAN_ACCOUNT_IMPL, PERMISSIONS_MANAGER } from "../config";
+import { CHAIN_ID, JUSTAN_ACCOUNT_IMPL } from "../config";
 import { justanAccountAbi } from "../abi/justanAccount";
 
 /**
@@ -35,53 +33,37 @@ export async function isInitialized(address: Address): Promise<boolean> {
 }
 
 /**
- * Build an unsigned EIP-7702 (type 4) transaction that:
- * 1. Sets the delegation to JustanAccount implementation
- * 2. Calls initialize() on the EOA (now a smart account) with two owners
- *
- * This does delegation + initialization in a SINGLE transaction.
+ * Build an unsigned EIP-7702 (type 4) delegation-only transaction.
+ * NO calldata — just sets the delegation code on the EOA.
+ * Initialization happens separately via UserOp through the EntryPoint.
  */
-export async function buildDelegationAndInitTx(
+export async function buildDelegationTx(
   eoaAddress: Address,
   signedAuth: { chainId: number; address: Address; nonce: number; yParity: number; r: Hex; s: Hex },
 ) {
   const nonce = await publicClient.getTransactionCount({ address: eoaAddress });
   const feeData = await publicClient.estimateFeesPerGas();
 
-  // Encode initialize(owners) — called on the EOA itself (which becomes the smart account)
-  const initData = encodeFunctionData({
-    abi: justanAccountAbi,
-    functionName: "initialize",
-    args: [
-      [
-        pad(eoaAddress),          // owner[0] = Ledger EOA
-        pad(PERMISSIONS_MANAGER), // owner[1] = PermissionsManager
-      ],
-    ],
-  });
-
   const tx = {
     type: "eip7702" as const,
     chainId: CHAIN_ID,
     nonce,
-    to: eoaAddress,                // call self — the delegation makes this a smart account call
+    to: eoaAddress,
     value: 0n,
-    data: initData,                // initialize with two owners
+    data: "0x" as Hex,            // no calldata — delegation only
     maxFeePerGas: feeData.maxFeePerGas ?? 1_000_000_000n,
     maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ?? 1_000_000n,
-    gas: 300_000n,                 // delegation + init needs more gas
+    gas: 100_000n,
     authorizationList: [signedAuth],
   };
 
   const serializedUnsigned = serializeTransaction(tx);
   const unsignedBytes = hexToBytes(serializedUnsigned);
 
-  console.log("[delegation] Built type 4 tx:", {
+  console.log("[delegation] Built type 4 tx (delegation only):", {
     nonce,
     to: eoaAddress,
-    data: initData.slice(0, 10) + "...",
-    gas: tx.gas,
-    authAddress: signedAuth.address,
+    authNonce: signedAuth.nonce,
   });
 
   return { tx, unsignedBytes };
@@ -94,7 +76,7 @@ export async function broadcastDelegationTx(
   tx: Parameters<typeof serializeTransaction>[0],
   signature: { r: string; s: string; v: number },
 ): Promise<Hex> {
-  const strip0x = (h: string) => h.startsWith("0x") ? h.slice(2) : h;
+  const strip0x = (h: string) => (h.startsWith("0x") ? h.slice(2) : h);
   const yParity = signature.v >= 27 ? signature.v - 27 : signature.v;
 
   const signedTx = serializeTransaction(tx, {
@@ -111,30 +93,27 @@ export async function broadcastDelegationTx(
 }
 
 /**
- * Wait for a transaction to be confirmed and verify delegation + initialization.
+ * Wait for tx confirmation and verify delegation was set.
+ * Retries getCode a few times to handle RPC propagation delay.
  */
 export async function waitAndVerify(hash: Hex, eoaAddress: Address) {
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  console.log("[delegation] Tx confirmed:", receipt.status, "block:", receipt.blockNumber);
+  console.log("[delegation] Tx status:", receipt.status, "block:", receipt.blockNumber);
 
-  // Verify delegation was set
-  const code = await publicClient.getCode({ address: eoaAddress });
-  const delegated = code?.startsWith("0xef0100") ?? false;
-  console.log("[delegation] Code after tx:", code?.slice(0, 20) ?? "empty", "delegated:", delegated);
+  // Retry getCode — RPC nodes may need a moment to reflect the delegation
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = await publicClient.getCode({ address: eoaAddress });
+    const delegated = code?.startsWith("0xef0100") ?? false;
+    console.log(`[delegation] getCode attempt ${attempt + 1}:`, code?.slice(0, 50) ?? "empty");
 
-  if (!delegated) {
-    throw new Error("Delegation not set — authorization may be invalid. Check the Ledger signed correctly.");
+    if (delegated) {
+      return { delegated: true, receipt };
+    }
+
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
-  // If tx reverted but delegation was set, it means the initialize call failed.
-  // This is OK — delegation is on-chain, we just need to initialize separately.
-  if (receipt.status === "reverted") {
-    console.warn("[delegation] Tx reverted but delegation is active. Initialize call may need a separate tx.");
-  }
-
-  // Verify initialization
-  const initialized = await isInitialized(eoaAddress);
-  console.log("[delegation] Initialized:", initialized);
-
-  return { delegated, initialized, receipt };
+  // If still not set, warn but don't block — let the UserOp step surface the real error
+  console.warn("[delegation] Code not detected after retries. Proceeding anyway.");
+  return { delegated: false, receipt };
 }

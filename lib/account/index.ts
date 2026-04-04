@@ -1,7 +1,7 @@
 export {
   isDelegated,
   isInitialized,
-  buildDelegationAndInitTx,
+  buildDelegationTx,
   broadcastDelegationTx,
   waitAndVerify,
 } from "./delegation";

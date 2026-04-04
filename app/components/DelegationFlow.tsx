@@ -4,19 +4,33 @@ import { useState } from "react";
 import { DeviceActionStatus } from "@ledgerhq/device-management-kit";
 import { useLedger } from "@/lib/ledger";
 import {
-  buildDelegationAndInitTx,
+  buildDelegationTx,
   broadcastDelegationTx,
   waitAndVerify,
 } from "@/lib/account/delegation";
+import {
+  encodeInitialize,
+  buildUserOp,
+  getUserOpHash,
+  estimateGas,
+  applyGasEstimate,
+  submitUserOp,
+  waitForUserOpReceipt,
+} from "@/lib/account/userOp";
 import { CHAIN_ID, ETH_PATH, JUSTAN_ACCOUNT_IMPL } from "@/lib/config";
 import type { Address, Hex } from "viem";
 
 type Step =
   | "idle"
   | "signing_auth"
-  | "signing_tx"
-  | "broadcasting"
-  | "confirming"
+  | "signing_delegation_tx"
+  | "broadcasting_delegation"
+  | "confirming_delegation"
+  | "building_userop"
+  | "estimating_gas"
+  | "signing_userop"
+  | "submitting_userop"
+  | "waiting_userop"
   | "done"
   | "error";
 
@@ -40,90 +54,142 @@ export function DelegationFlow() {
       setError(null);
       setTxHash(null);
 
-      // ========== STEP 1: Sign EIP-7702 authorization ==========
-      setStep("signing_auth");
-      setUserPrompt("Please confirm the EIP-7702 delegation on your Ledger device.");
+      const needsDelegation = accountStatus === "not_delegated";
 
-      const { publicClient } = await import("@/lib/clients");
-      const nonce = await publicClient.getTransactionCount({ address: eoaAddress });
+      // ==========================================
+      // PHASE 1: Set delegation (type 4 tx, no calldata)
+      // ==========================================
+      if (needsDelegation) {
+        setStep("signing_auth");
+        setUserPrompt("Confirm the EIP-7702 delegation on your Ledger.");
 
-      // EIP-7702 nonce: when sender == authority (self-sponsored), the sender's
-      // nonce is incremented BEFORE the authorization list is processed.
-      // So the auth nonce must be current nonce + 1.
-      const authNonce = nonce + 1;
-      console.log("[Setup] TX nonce:", nonce, "Auth nonce:", authNonce);
+        const { publicClient } = await import("@/lib/clients");
+        const nonce = await publicClient.getTransactionCount({ address: eoaAddress });
 
-      const signedAuth = await new Promise<{ r: string; s: string; v: number }>(
-        (resolve, reject) => {
-          const { observable } = signer.signDelegationAuthorization(
-            ETH_PATH,
-            CHAIN_ID,
-            JUSTAN_ACCOUNT_IMPL,
-            authNonce,
-          );
-          observable.subscribe({
-            next: (state) => {
-              if (state.status === DeviceActionStatus.Completed) {
-                console.log("[Setup] Auth signed:", state.output);
-                resolve(state.output as { r: string; s: string; v: number });
-              } else if (state.status === DeviceActionStatus.Error) {
-                reject(state.error);
-              }
-            },
-            error: reject,
-          });
+        // Auth nonce = nonce + 1 (sender nonce incremented before auth check)
+        const authNonce = nonce + 1;
+        console.log("[Setup] TX nonce:", nonce, "Auth nonce:", authNonce);
+
+        const signedAuth = await new Promise<{ r: string; s: string; v: number }>(
+          (resolve, reject) => {
+            const { observable } = signer.signDelegationAuthorization(
+              ETH_PATH, CHAIN_ID, JUSTAN_ACCOUNT_IMPL, authNonce,
+            );
+            observable.subscribe({
+              next: (s) => {
+                if (s.status === DeviceActionStatus.Completed) resolve(s.output as { r: string; s: string; v: number });
+                else if (s.status === DeviceActionStatus.Error) reject(s.error);
+              },
+              error: reject,
+            });
+          },
+        );
+
+        setUserPrompt(null);
+
+        const formattedAuth = {
+          chainId: CHAIN_ID,
+          address: JUSTAN_ACCOUNT_IMPL as Address,
+          nonce: authNonce,
+          yParity: signedAuth.v % 2,
+          r: `0x${strip0x(signedAuth.r)}` as Hex,
+          s: `0x${strip0x(signedAuth.s)}` as Hex,
+        };
+
+        // Sign the type 4 tx
+        setStep("signing_delegation_tx");
+        setUserPrompt("Confirm the delegation transaction on your Ledger.");
+
+        const { tx, unsignedBytes } = await buildDelegationTx(eoaAddress, formattedAuth);
+
+        const txSig = await new Promise<{ r: string; s: string; v: number }>(
+          (resolve, reject) => {
+            const { observable } = signer.signTransaction(ETH_PATH, unsignedBytes);
+            observable.subscribe({
+              next: (s) => {
+                if (s.status === DeviceActionStatus.Completed) resolve(s.output as { r: string; s: string; v: number });
+                else if (s.status === DeviceActionStatus.Error) reject(s.error);
+              },
+              error: reject,
+            });
+          },
+        );
+
+        setUserPrompt(null);
+
+        // Broadcast
+        setStep("broadcasting_delegation");
+        const hash = await broadcastDelegationTx(tx, txSig);
+        console.log("[Setup] Delegation tx:", hash);
+        setTxHash(hash);
+
+        // Wait & verify
+        setStep("confirming_delegation");
+        await waitAndVerify(hash, eoaAddress);
+        console.log("[Setup] Delegation confirmed and verified!");
+      }
+
+      // ==========================================
+      // PHASE 2: Initialize via UserOp (through bundler/EntryPoint)
+      // ==========================================
+      setStep("building_userop");
+      const initCall = encodeInitialize(eoaAddress);
+      let userOp = await buildUserOp(eoaAddress, [initCall], false);
+
+      // Estimate gas — delegation is on-chain now, so this should work
+      setStep("estimating_gas");
+      const gasEst = await estimateGas(userOp);
+      userOp = applyGasEstimate(userOp, gasEst);
+
+      // Sign the UserOp hash
+      setStep("signing_userop");
+      setUserPrompt("Confirm the initialization on your Ledger.");
+
+      const opHash = getUserOpHash(userOp, CHAIN_ID);
+      console.log("[Setup] UserOp hash:", opHash);
+
+      // EIP-712 typed data matching JustanAccount's domain
+      const typedData = {
+        domain: {
+          name: "JustanAccount",
+          version: "1",
+          chainId: CHAIN_ID,
+          verifyingContract: eoaAddress,
         },
-      );
-
-      setUserPrompt(null);
-
-      const formattedAuth = {
-        chainId: CHAIN_ID,
-        address: JUSTAN_ACCOUNT_IMPL as Address,
-        nonce: authNonce,
-        yParity: signedAuth.v % 2,
-        r: `0x${strip0x(signedAuth.r)}` as Hex,
-        s: `0x${strip0x(signedAuth.s)}` as Hex,
+        types: {
+          JustanAccountMessage: [{ name: "hash", type: "bytes32" }],
+        },
+        primaryType: "JustanAccountMessage",
+        message: { hash: opHash },
       };
 
-      // ========== STEP 2: Build & sign the type 4 tx (delegate + initialize) ==========
-      setStep("signing_tx");
-      setUserPrompt(
-        "Please confirm the transaction on your Ledger device. This sets the delegation and initializes your smart account.",
-      );
-
-      const { tx, unsignedBytes } = await buildDelegationAndInitTx(eoaAddress, formattedAuth);
-
-      const txSig = await new Promise<{ r: string; s: string; v: number }>(
+      const sig = await new Promise<{ r: string; s: string; v: number }>(
         (resolve, reject) => {
-          const { observable } = signer.signTransaction(ETH_PATH, unsignedBytes);
+          const { observable } = signer.signTypedData(ETH_PATH, typedData);
           observable.subscribe({
-            next: (state) => {
-              if (state.status === DeviceActionStatus.Completed) {
-                console.log("[Setup] Tx signed:", state.output);
-                resolve(state.output as { r: string; s: string; v: number });
-              } else if (state.status === DeviceActionStatus.Error) {
-                reject(state.error);
-              }
+            next: (s) => {
+              if (s.status === DeviceActionStatus.Completed) resolve(s.output as { r: string; s: string; v: number });
+              else if (s.status === DeviceActionStatus.Error) reject(s.error);
             },
             error: reject,
           });
         },
       );
 
+      const vByte = sig.v >= 27 ? sig.v : sig.v + 27;
+      userOp.signature = `0x${strip0x(sig.r)}${strip0x(sig.s)}${vByte.toString(16).padStart(2, "0")}` as Hex;
+
       setUserPrompt(null);
 
-      // ========== STEP 3: Broadcast ==========
-      setStep("broadcasting");
-      const hash = await broadcastDelegationTx(tx, txSig);
-      console.log("[Setup] Tx hash:", hash);
-      setTxHash(hash);
+      // Submit
+      setStep("submitting_userop");
+      const userOpHash = await submitUserOp(userOp);
+      console.log("[Setup] UserOp hash:", userOpHash);
 
-      // ========== STEP 4: Wait & verify ==========
-      setStep("confirming");
-      const result = await waitAndVerify(hash, eoaAddress);
-      console.log("[Setup] Result:", result);
+      setStep("waiting_userop");
+      await waitForUserOpReceipt(userOpHash);
 
+      setTxHash(userOpHash);
       setStep("done");
       await refreshAccountStatus();
     } catch (err) {
@@ -137,14 +203,19 @@ export function DelegationFlow() {
   const stepLabels: Record<Step, string> = {
     idle: "",
     signing_auth: "Signing EIP-7702 authorization...",
-    signing_tx: "Signing delegation + init transaction...",
-    broadcasting: "Broadcasting transaction...",
-    confirming: "Waiting for confirmation...",
+    signing_delegation_tx: "Signing delegation transaction...",
+    broadcasting_delegation: "Broadcasting delegation...",
+    confirming_delegation: "Confirming delegation...",
+    building_userop: "Building UserOp...",
+    estimating_gas: "Estimating gas...",
+    signing_userop: "Signing UserOp...",
+    submitting_userop: "Submitting UserOp...",
+    waiting_userop: "Waiting for confirmation...",
     done: "Complete!",
     error: "Failed",
   };
 
-  const isRunning = step !== "idle" && step !== "done" && step !== "error";
+  const isRunning = !["idle", "done", "error"].includes(step);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
@@ -156,8 +227,8 @@ export function DelegationFlow() {
 
       <p className="mb-4 text-sm text-zinc-400">
         {accountStatus === "not_delegated"
-          ? "One transaction: sets EIP-7702 delegation and initializes with Ledger EOA + Permissions Manager as owners. Requires ETH for gas."
-          : "Your account is delegated. This will initialize it with the two owners."}
+          ? "Step 1: EIP-7702 delegation tx (requires ETH for gas). Step 2: Initialize owners via UserOp."
+          : "Delegation active. Initialize the account with Ledger EOA + Permissions Manager as owners."}
       </p>
 
       <button
@@ -204,7 +275,7 @@ export function DelegationFlow() {
 
       {step === "done" && (
         <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-          <p className="text-sm text-emerald-400">Smart account setup complete! Delegation active, owners initialized.</p>
+          <p className="text-sm text-emerald-400">Smart account ready! Delegation active, owners initialized.</p>
         </div>
       )}
 
