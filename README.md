@@ -1,5 +1,29 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Ledger & permissions demo
+
+Walk through the flow in this order:
+
+1. **Connect Ledger** — In the app, connect your Ledger and complete the wallet connection flow.
+2. **Upgrade to EIP-7702** — In the UI, complete the upgrade so the account can use EIP-7702 delegation.
+3. **Grant permission** — Use the Grant Permission flow in the dashboard. After granting, ensure your `.env` includes the values the agent scripts need (for example `PERMISSION_ID` from the grant, `SPENDER_PRIVATE_KEY` for the spender EOA, and `NEXT_PUBLIC_JAW_API_KEY`).
+
+4. **Run the permissioned execution script** (spender executes within the granted limits; logs to the app):
+
+   ```bash
+   npx tsx scripts/executeWithPermission.ts
+   ```
+
+5. **Run the exceed-limit request** (simulates an agent asking to spend above its limit — requires human approval):
+
+   ```bash
+   npx tsx scripts/exceedLimitRequest.ts
+   ```
+
+6. **Approve on the dashboard** — Open the Agent Monitor (or pending approvals UI), review the request, and approve so the transfer is signed on Ledger and submitted.
+
+For steps 4–5, keep the dev server running (`npm run dev`) unless you point `API_BASE` in `.env` at another deployment. Optional script env vars include `API_BASE`, and for `exceedLimitRequest.ts` you can set `RECIPIENT` and `AMOUNT_ETH` (use an amount above the permission spend limit to force the approval path).
+
 ## Getting Started
 
 First, run the development server:

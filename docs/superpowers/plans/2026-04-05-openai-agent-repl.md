@@ -1,3 +1,37 @@
+# OpenAI Agent REPL Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Turn `scripts/openaiAgent.ts` into a persistent REPL — no args = interactive loop, args still work as single-shot.
+
+**Architecture:** Wrap the existing `main()` logic in a `readline` loop. The `parseIntent` + execution path is untouched. Single file change only.
+
+**Tech Stack:** Node.js `readline` (built-in), existing `openai`, `viem`, `@jaw.id/core`, `tsx`
+
+---
+
+### Task 1: Add REPL loop to `scripts/openaiAgent.ts`
+
+**Files:**
+- Modify: `scripts/openaiAgent.ts`
+
+The current `main()` reads one line (from argv or stdin) then exits. We replace it with:
+- If argv args are present → run once and exit (existing behaviour preserved)
+- If no args → open a `readline` interface and loop until the user types `exit` or `quit`
+
+- [ ] **Step 1: Open `scripts/openaiAgent.ts` and locate `readUserLine` and `main`**
+
+Read the file so you have the full current source in context before editing.
+
+- [ ] **Step 2: Replace `readUserLine` with a single-shot helper and add `runRepl`**
+
+Replace the entire file content with the following. The key changes are:
+1. `readArgv()` — returns argv string or `null` (no stdin read)
+2. `runOnce(userText)` — the single command execution extracted from old `main()`
+3. `runRepl()` — readline loop
+4. `main()` — dispatches to `runOnce` or `runRepl`
+
+```typescript
 /**
  * Natural-language agent: OpenAI parses intent, then either executes with
  * permission (autonomous) or posts a signature_request when over the DB
@@ -131,7 +165,7 @@ async function parseIntent(userText: string): Promise<ParsedIntent> {
   };
 }
 
-/** Execute one natural-language command. */
+/** Execute one parsed user command. Returns false if the agent should stop. */
 async function runOnce(userText: string): Promise<void> {
   console.log("\nYou said:", userText);
   console.log("Parsing with OpenAI…");
@@ -263,3 +297,32 @@ main().catch((err) => {
   console.error("\n✗", err.message ?? err);
   process.exit(1);
 });
+```
+
+- [ ] **Step 3: Manually test single-shot mode still works**
+
+```bash
+cd /Users/happy/Documents/Development/Web3/Hackathon/Cannes/ledger-app
+npx tsx scripts/openaiAgent.ts "send 0.0001 ETH to 0x926a19D7429F9AD47b2cB2b0e5c46A9E69F05a3e"
+```
+
+Expected: parses intent, prints plan JSON, executes (autonomous or escalation) then exits.
+
+- [ ] **Step 4: Manually test REPL mode**
+
+```bash
+npx tsx scripts/openaiAgent.ts
+```
+
+Expected: prints REPL banner and `>` prompt. Type commands one by one:
+- `send 0.0001 ETH to 0x926a19D7429F9AD47b2cB2b0e5c46A9E69F05a3e` → executes transfer
+- `swap eth to usdc` → executes swap
+- `send 5 ETH to 0x926a19D7429F9AD47b2cB2b0e5c46A9E69F05a3e` → exceeds limit, posts signature_request, waits for Ledger approval
+- `exit` → prints "Goodbye." and exits cleanly
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/openaiAgent.ts docs/superpowers/plans/2026-04-05-openai-agent-repl.md
+git commit -m "feat: convert openaiAgent to persistent REPL with single-shot fallback"
+```

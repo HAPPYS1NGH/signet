@@ -26,7 +26,7 @@ const PIMLICO_BUNDLER_URL = "https://api.pimlico.io/v2/84532/rpc?apikey=pim_QEUJ
 export const BUNDLER_URL = PIMLICO_BUNDLER_URL;
 
 // --- Derivation Path ---
-export const ETH_PATH = "44'/60'/0'/0/10";
+export const ETH_PATH = "44'/60'/0'/0/11";
 
 // --- EIP-7702 Stub Signature (for gas estimation) ---
 export const STUB_SIGNATURE =
