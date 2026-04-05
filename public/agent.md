@@ -7,7 +7,7 @@ You have access to a Ledger hardware wallet signing service. A user has granted 
 These values are provided by the user when they grant you a permission:
 
 - **Agent ID**: `<AGENT_ID>` — your identifier in the Signet app
-- **API Base URL**: `<BASE_URL>` — e.g. `https://ledger-app.vercel.app`
+- **API Base URL**: `<BASE_URL>` — e.g. `https://signet-jet.vercel.app/`
 - **Permission ID**: `<PERMISSION_ID>` — the on-chain permission hash
 - **Your Private Key**: used with `@jaw.id/core` for autonomous execution
 - **JAW API Key**: `<JAW_API_KEY>` — required by the JAW bundler
@@ -100,16 +100,19 @@ GET <BASE_URL>/api/tx/<txId>
 Poll every 5–10 seconds. The user sees the request in their dashboard and approves or rejects it. Approving triggers a Ledger signing flow; the signed transaction is submitted on-chain.
 
 **Pending:**
+
 ```json
 { "txId": "...", "status": "pending", "txHash": null }
 ```
 
 **Approved:**
+
 ```json
 { "txId": "...", "status": "approved", "txHash": "0x..." }
 ```
 
 **Rejected:**
+
 ```json
 { "txId": "...", "status": "rejected", "txHash": null }
 ```
@@ -146,9 +149,9 @@ Response includes spend limits, call restrictions, and expiry.
 
 The Signet reference agent (`scripts/openaiAgent.ts`) demonstrates these patterns:
 
-| Action | Method | Notes |
-|---|---|---|
-| Send ETH | `account.sendCalls` with `value` | Autonomous if within spend limit |
-| Send USDC | `account.sendCalls` with ERC-20 `transfer` calldata | Autonomous if within spend limit |
-| Swap ETH → USDC | `account.sendCalls` to Uniswap router | Autonomous if within spend limit |
-| Anything exceeding limits | Signature request | User approves on Ledger |
+| Action                    | Method                                              | Notes                            |
+| ------------------------- | --------------------------------------------------- | -------------------------------- |
+| Send ETH                  | `account.sendCalls` with `value`                    | Autonomous if within spend limit |
+| Send USDC                 | `account.sendCalls` with ERC-20 `transfer` calldata | Autonomous if within spend limit |
+| Swap ETH → USDC           | `account.sendCalls` to Uniswap router               | Autonomous if within spend limit |
+| Anything exceeding limits | Signature request                                   | User approves on Ledger          |
