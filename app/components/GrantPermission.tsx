@@ -469,7 +469,18 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
           {permissionId && (
             <div className="mt-3">
               <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Permission ID</p>
-              <p className="mt-1 break-all font-mono text-xs text-orange-400/80">{permissionId}</p>
+              <p className="mt-0.5 text-[10px] text-zinc-600">On-chain identifier for this permission scope</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-black/30 px-3 py-2.5 font-mono text-xs text-orange-400/90 ring-1 ring-white/[0.06]">
+                  {permissionId}
+                </code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(permissionId)}
+                  className="shrink-0 rounded-lg bg-white/[0.06] px-3 py-2.5 text-xs text-zinc-400 transition-colors hover:bg-white/[0.1] hover:text-zinc-300 cursor-pointer"
+                >
+                  Copy
+                </button>
+              </div>
             </div>
           )}
           {txHash && (

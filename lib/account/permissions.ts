@@ -47,6 +47,9 @@ export interface GrantPermissionParams {
   spends: { token: Address; allowance: bigint; unit: SpendPeriod; multiplier?: number }[];
 }
 
+/** Sentinel value for empty calldata (plain ETH transfers) in PermissionsManager */
+export const EMPTY_CALLDATA_SELECTOR = "0xe0e0e0e0" as Hex;
+
 // --- Period Enum ---
 
 function periodToEnum(period: SpendPeriod): number {

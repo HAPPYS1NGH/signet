@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <!-- Background -->
+  <rect width="180" height="180" rx="32" fill="#000000"/>
+  <!-- Outer ring -->
+  <circle cx="90" cy="90" r="68" fill="none" stroke="#e8520e" stroke-width="6"/>
+  <!-- Inner accent ring -->
+  <circle cx="90" cy="90" r="50" fill="none" stroke="#e8520e" stroke-width="2" opacity="0.5"/>
+  <!-- S Monogram -->
+  <text x="90" y="118" text-anchor="middle" font-family="Syne, Arial, sans-serif" font-size="80" font-weight="800" fill="#e8520e">S</text>
+  <!-- Cardinal dots -->
+  <circle cx="90" cy="28" r="7" fill="#e8520e"/>
+  <circle cx="90" cy="152" r="7" fill="#e8520e"/>
+  <circle cx="28" cy="90" r="7" fill="#e8520e"/>
+  <circle cx="152" cy="90" r="7" fill="#e8520e"/>
+</svg>

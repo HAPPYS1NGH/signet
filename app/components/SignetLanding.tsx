@@ -1,6 +1,7 @@
 "use client";
 
 import { useLedger } from "@/lib/ledger";
+import { Logo, LogoIcon } from "./Logo";
 
 /* ─── Signet Seal SVG ─── */
 function SealMark() {
@@ -150,18 +151,7 @@ export function SignetLanding() {
 
       {/* ══════ NAV ══════ */}
       <nav className="reveal-fade relative z-20 flex items-center justify-between px-8 py-6 md:px-12 lg:px-20">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--accent)]">
-            <span
-              className="font-[var(--font-syne)] text-xs font-extrabold text-black"
-            >
-              S
-            </span>
-          </div>
-          <span className="font-[var(--font-syne)] text-base font-bold tracking-tight text-[var(--foreground)]">
-            Signet
-          </span>
-        </div>
+        <Logo size="md" />
 
         <button
           onClick={connect}
@@ -403,9 +393,7 @@ export function SignetLanding() {
       <footer className="border-t border-[var(--rule)] px-8 py-8 md:px-12 lg:px-20">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-5 w-5 items-center justify-center rounded bg-[var(--accent)]">
-              <span className="font-[var(--font-syne)] text-[8px] font-extrabold text-black">S</span>
-            </div>
+            <LogoIcon size={20} />
             <span className="text-[12px] text-[var(--muted)]/60">Signet</span>
           </div>
           <p className="font-mono text-[11px] text-[var(--muted)]/40">

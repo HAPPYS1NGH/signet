@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   title: "Signet — Safe Agent Sessions",
   description:
     "Give AI agents on-chain session scopes instead of private keys. Granular permissions enforced by smart contracts, controlled by your Ledger.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/icon-dark.svg",
+  },
 };
 
 export default function RootLayout({

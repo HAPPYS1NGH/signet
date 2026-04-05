@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" fill="none">
+  <!-- Seal Icon -->
+  <g transform="translate(0, 2)">
+    <!-- Outer ring -->
+    <circle cx="18" cy="18" r="17" fill="none" stroke="#e8520e" stroke-width="1.5"/>
+    <!-- Inner accent ring -->
+    <circle cx="18" cy="18" r="13" fill="none" stroke="#e8520e" stroke-width="0.5" opacity="0.5"/>
+    <!-- S Monogram -->
+    <text x="18" y="25" text-anchor="middle" font-family="Syne, sans-serif" font-size="20" font-weight="800" fill="#e8520e">S</text>
+    <!-- Seal dots -->
+    <circle cx="18" cy="3" r="1.5" fill="#e8520e"/>
+    <circle cx="18" cy="33" r="1.5" fill="#e8520e"/>
+    <circle cx="3" cy="18" r="1.5" fill="#e8520e"/>
+    <circle cx="33" cy="18" r="1.5" fill="#e8520e"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="46" y="28" font-family="Syne, sans-serif" font-size="22" font-weight="700" fill="#f0ece4" letter-spacing="-0.02em">Signet</text>
+</svg>
