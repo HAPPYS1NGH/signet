@@ -8,7 +8,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   encodeFunctionData,
   formatEther,
+  formatUnits,
   parseEther,
+  parseUnits,
   type Address,
   type Hex,
 } from "viem";
@@ -22,8 +24,22 @@ export const NATIVE_TOKEN =
 
 const SWAP_ROUTER = "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4" as Address;
 const WETH = "0x4200000000000000000000000000000000000006" as Address;
-const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
+export const USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address;
+export const USDC_DECIMALS = 6;
 const SWAP_FEE = 3000;
+
+const erc20TransferAbi = [
+  {
+    name: "transfer",
+    type: "function",
+    inputs: [
+      { name: "recipient", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+] as const;
 
 const exactInputSingleAbi = [
   {
@@ -69,6 +85,7 @@ export interface ResolvedAgent {
   permissionEnd: number;
   spendLimitLabel: string;
   nativeAllowanceWei: bigint | null;
+  usdcAllowanceUnits: bigint | null;
 }
 
 export interface CallPayload {
@@ -98,18 +115,17 @@ export async function resolveAgent(
   const spends = agent.permission?.spends ?? [];
 
   let nativeAllowanceWei: bigint | null = null;
+  let usdcAllowanceUnits: bigint | null = null;
+
   for (const s of spends) {
     const t = (s.token as string).toLowerCase();
     if (
       t === NATIVE_TOKEN.toLowerCase() ||
       t === "0x0000000000000000000000000000000000000000"
     ) {
-      try {
-        nativeAllowanceWei = BigInt(s.allowance);
-      } catch {
-        nativeAllowanceWei = null;
-      }
-      break;
+      try { nativeAllowanceWei = BigInt(s.allowance); } catch { /* ignore */ }
+    } else if (t === USDC.toLowerCase()) {
+      try { usdcAllowanceUnits = BigInt(s.allowance); } catch { /* ignore */ }
     }
   }
 
@@ -117,13 +133,14 @@ export async function resolveAgent(
   const spendLimitLabel =
     firstSpend && firstSpend.allowance && firstSpend.allowance !== "0"
       ? `${formatEther(BigInt(firstSpend.allowance))} ETH / ${firstSpend.unit ?? "period"}`
-      : "no spend limit recorded in DB";
+      : "no spend limit recorded";
 
   return {
     agentId: agent.agentId as string,
     permissionEnd: agent.permission?.end ?? 0,
     spendLimitLabel,
     nativeAllowanceWei,
+    usdcAllowanceUnits,
   };
 }
 
@@ -332,7 +349,7 @@ export async function runEthTransfer(params: {
   ];
 
   if (params.useAutonomous) {
-    console.log("\n🚀 Autonomous path (within DB spend hint)…");
+    console.log("\n🚀 Autonomous path (within spend limit)…");
     const result = await account.sendCalls(
       [{ to: params.recipient, value: params.amountWei }],
       { permissionId: params.permissionId },
@@ -438,6 +455,66 @@ export async function runSwapEthToUsdc(params: {
   }
 }
 
+export async function runUsdcTransfer(params: {
+  jawApiKey: string;
+  spenderPk: Hex;
+  permissionId: Hex;
+  apiBase: string;
+  recipient: Address;
+  amountUnits: bigint;
+  description: string;
+  useAutonomous: boolean;
+}) {
+  const resolved = await resolveAgent(params.apiBase, params.permissionId);
+  const { account } = await createSpenderAccount(params.jawApiKey, params.spenderPk);
+
+  const data = encodeFunctionData({
+    abi: erc20TransferAbi,
+    functionName: "transfer",
+    args: [params.recipient, params.amountUnits],
+  });
+
+  const callsForApi = [{ to: USDC, value: "0", data }];
+
+  if (params.useAutonomous) {
+    console.log("  Submitting transaction…");
+    const result = await account.sendCalls(
+      [{ to: USDC, value: 0n, data }],
+      { permissionId: params.permissionId },
+    );
+    const txHash = await waitForCalls(account, result.id as Hex);
+    if (txHash) {
+      console.log(`  ✓ Done!  https://sepolia.basescan.org/tx/${txHash}`);
+    }
+    await logAutonomousTx({
+      apiBase: params.apiBase,
+      agentId: resolved.agentId,
+      calls: callsForApi,
+      description: params.description,
+      userOpHash: result.id,
+      txHash,
+    });
+    return;
+  }
+
+  const { txId } = await postSignatureRequest({
+    apiBase: params.apiBase,
+    agentId: resolved.agentId,
+    calls: callsForApi,
+    description: params.description,
+  });
+  console.log("  Approval request sent. txId:", txId);
+
+  const final = await pollUntilExecuted(params.apiBase, txId);
+  if (final.status === "rejected") {
+    console.log("\n  ✗ Rejected by owner.");
+    return;
+  }
+  if (final.status === "approved" && final.txHash) {
+    console.log(`\n  ✓ Approved!  https://sepolia.basescan.org/tx/${final.txHash}`);
+  }
+}
+
 export function printAgentContext(resolved: ResolvedAgent) {
   console.log("Agent ID      :", resolved.agentId);
   if (resolved.permissionEnd > 0) {
@@ -446,7 +523,7 @@ export function printAgentContext(resolved: ResolvedAgent) {
       new Date(resolved.permissionEnd * 1000).toLocaleString(),
     );
   }
-  console.log("Spend (DB)    :", resolved.spendLimitLabel);
+  console.log("Spend limit    :", resolved.spendLimitLabel);
   if (resolved.nativeAllowanceWei !== null) {
     console.log(
       "Native allow. :",

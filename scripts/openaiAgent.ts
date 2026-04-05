@@ -1,23 +1,16 @@
 /**
- * Natural-language agent: OpenAI parses intent, then either executes with
- * permission (autonomous) or posts a signature_request when over the DB
- * spend hint — same flows as executeWithPermission.ts / exceedLimitRequest.ts.
+ * Signet AI Agent — natural language blockchain execution on Base Sepolia.
  *
- * Single-shot usage:
- *   npx tsx scripts/openaiAgent.ts "Send 0.0001 ETH to 0x..."
+ * Single-shot:  npx tsx scripts/openaiAgent.ts "Send 0.0001 ETH to 0x..."
+ * REPL (no args): npx tsx scripts/openaiAgent.ts
  *
- * REPL usage (no args):
- *   npx tsx scripts/openaiAgent.ts
- *
- * Env:
- *   OPEN_AI_API_KEY or OPENAI_API_KEY
- *   SPENDER_PRIVATE_KEY, PERMISSION_ID, NEXT_PUBLIC_JAW_API_KEY
- *   API_BASE (optional, default http://localhost:3000)
+ * Env: OPEN_AI_API_KEY, SPENDER_PRIVATE_KEY, PERMISSION_ID, NEXT_PUBLIC_JAW_API_KEY
+ *      API_BASE (optional, default http://localhost:3000)
  */
 
 import OpenAI from "openai";
 import * as readline from "readline";
-import { isAddress, parseEther, type Address, type Hex } from "viem";
+import { isAddress, parseEther, parseUnits, type Address, type Hex } from "viem";
 import dotenv from "dotenv";
 
 import {
@@ -25,25 +18,21 @@ import {
   withinDbNativeSpendHint,
   runEthTransfer,
   runSwapEthToUsdc,
-  printAgentContext,
+  runUsdcTransfer,
+  USDC_DECIMALS,
 } from "./lib/permissionAgentRunner";
 
 dotenv.config();
 
-const OPENAI_KEY =
-  process.env.OPEN_AI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+const OPENAI_KEY = process.env.OPEN_AI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
 const JAW_API_KEY = process.env.NEXT_PUBLIC_JAW_API_KEY!;
-const SPENDER_PK = process.env.SPENDER_PRIVATE_KEY as Hex;
+const SPENDER_PK  = process.env.SPENDER_PRIVATE_KEY as Hex;
 const PERMISSION_ID = process.env.PERMISSION_ID as Hex;
-const API_BASE = process.env.API_BASE ?? "http://localhost:3000";
+const API_BASE    = process.env.API_BASE ?? "http://localhost:3000";
 
 type ParsedIntent =
-  | {
-      intent: "transfer_eth";
-      recipient: Address;
-      amount_eth: string;
-      reasoning: string;
-    }
+  | { intent: "transfer_eth"; recipient: Address; amount_eth: string; reasoning: string }
+  | { intent: "transfer_usdc"; recipient: Address; amount_usdc: string; reasoning: string }
   | { intent: "swap_eth_to_usdc"; reasoning: string }
   | { intent: "clarify"; message: string }
   | { intent: "unsupported"; message: string };
@@ -52,23 +41,23 @@ const SYSTEM = `You are a routing assistant for a blockchain agent on Base Sepol
 The user speaks in plain language. You output ONLY valid JSON, no markdown.
 
 Classify the request into one of:
-1) transfer_eth — user wants to send native ETH to an address. You MUST extract:
+1) transfer_eth — user wants to send native ETH to an address. Extract:
    - recipient: checksummed 0x address
-   - amount_eth: decimal string e.g. "0.0001" (ETH, not wei)
-2) swap_eth_to_usdc — user wants to swap ETH for USDC via Uniswap (use this for "swap", "trade", "convert to USDC").
-3) clarify — not enough information (missing amount or recipient for a transfer). Include a short "message" question.
-4) unsupported — anything else (NFTs, other tokens, bridges, etc.). Include "message" explaining briefly.
+   - amount_eth: decimal string e.g. "0.0001"
+2) transfer_usdc — user wants to send USDC tokens to an address. Extract:
+   - recipient: checksummed 0x address
+   - amount_usdc: decimal string e.g. "10.5"
+3) swap_eth_to_usdc — user wants to swap ETH for USDC via Uniswap.
+4) clarify — not enough info (missing amount or recipient). Include a short "message" question.
+5) unsupported — anything else. Include "message" explaining briefly.
 
-Also include "reasoning" (one short sentence) for transfer_eth and swap_eth_to_usdc.
+Include "reasoning" (one short sentence) for transfer_eth, transfer_usdc, and swap_eth_to_usdc.
 
-Example output for transfer:
-{"intent":"transfer_eth","recipient":"0x...","amount_eth":"0.001","reasoning":"..."}
-
-Example for swap:
-{"intent":"swap_eth_to_usdc","reasoning":"..."}
-
-Example for clarify:
-{"intent":"clarify","message":"What address should receive the ETH?"}`;
+Examples:
+{"intent":"transfer_eth","recipient":"0x...","amount_eth":"0.001","reasoning":"User wants to send ETH."}
+{"intent":"transfer_usdc","recipient":"0x...","amount_usdc":"10.5","reasoning":"User wants to send USDC."}
+{"intent":"swap_eth_to_usdc","reasoning":"User wants to convert ETH to USDC."}
+{"intent":"clarify","message":"Which address should receive the funds?"}`;
 
 async function parseIntent(userText: string): Promise<ParsedIntent> {
   const client = new OpenAI({ apiKey: OPENAI_KEY });
@@ -82,7 +71,7 @@ async function parseIntent(userText: string): Promise<ParsedIntent> {
     temperature: 0.2,
   });
   const raw = res.choices[0]?.message?.content;
-  if (!raw) throw new Error("Empty OpenAI response");
+  if (!raw) throw new Error("Empty response from OpenAI");
   const data = JSON.parse(raw) as Record<string, unknown>;
   const intent = data.intent as string;
 
@@ -90,84 +79,98 @@ async function parseIntent(userText: string): Promise<ParsedIntent> {
     const recipient = data.recipient as string;
     const amount_eth = String(data.amount_eth ?? "");
     if (!isAddress(recipient)) {
-      return {
-        intent: "clarify",
-        message: `Invalid or missing recipient address. Got: ${recipient}`,
-      };
+      return { intent: "clarify", message: `I couldn't find a valid wallet address in your message. Could you share the full 0x address?` };
     }
-    try {
-      parseEther(amount_eth);
-    } catch {
-      return {
-        intent: "clarify",
-        message: `Invalid amount. Use a decimal ETH amount (e.g. 0.0001). Got: ${amount_eth}`,
-      };
+    try { parseEther(amount_eth); } catch {
+      return { intent: "clarify", message: `I couldn't parse the amount "${amount_eth}". Try something like "0.001 ETH".` };
     }
-    return {
-      intent: "transfer_eth",
-      recipient: recipient as Address,
-      amount_eth,
-      reasoning: String(data.reasoning ?? ""),
-    };
+    return { intent: "transfer_eth", recipient: recipient as Address, amount_eth, reasoning: String(data.reasoning ?? "") };
+  }
+  if (intent === "transfer_usdc") {
+    const recipient = data.recipient as string;
+    const amount_usdc = String(data.amount_usdc ?? "");
+    if (!isAddress(recipient)) {
+      return { intent: "clarify", message: `I couldn't find a valid wallet address. Could you share the full 0x address?` };
+    }
+    try { parseUnits(amount_usdc, USDC_DECIMALS); } catch {
+      return { intent: "clarify", message: `I couldn't parse the USDC amount "${amount_usdc}". Try something like "10" or "0.5".` };
+    }
+    return { intent: "transfer_usdc", recipient: recipient as Address, amount_usdc, reasoning: String(data.reasoning ?? "") };
   }
   if (intent === "swap_eth_to_usdc") {
-    return {
-      intent: "swap_eth_to_usdc",
-      reasoning: String(data.reasoning ?? ""),
-    };
+    return { intent: "swap_eth_to_usdc", reasoning: String(data.reasoning ?? "") };
   }
   if (intent === "clarify") {
-    return {
-      intent: "clarify",
-      message: String(data.message ?? "Could you provide more detail?"),
-    };
+    return { intent: "clarify", message: String(data.message ?? "Could you give me a bit more detail?") };
   }
   return {
     intent: "unsupported",
-    message: String(
-      data.message ??
-        "This agent only supports ETH transfers and ETH→USDC swaps on Base Sepolia.",
-    ),
+    message: String(data.message ?? "I can only send ETH or swap ETH → USDC on Base Sepolia right now."),
   };
 }
 
-/** Execute one natural-language command. */
 async function runOnce(userText: string): Promise<void> {
-  console.log("\nYou said:", userText);
-  console.log("Parsing with OpenAI…");
-
+  process.stdout.write("  Thinking…");
   const parsed = await parseIntent(userText);
-  console.log("Plan:", JSON.stringify(parsed, null, 2), "\n");
+  process.stdout.write("\r  \r"); // clear "Thinking…"
 
   if (parsed.intent === "clarify") {
-    console.log("clarify:", parsed.message);
+    console.log(`  ? ${parsed.message}`);
     return;
   }
   if (parsed.intent === "unsupported") {
-    console.log("unsupported:", parsed.message);
+    console.log(`  ✗ ${parsed.message}`);
     return;
   }
 
+  if (parsed.intent === "transfer_eth") {
+    console.log(`  → Send ${parsed.amount_eth} ETH to ${parsed.recipient}`);
+  } else if (parsed.intent === "transfer_usdc") {
+    console.log(`  → Send ${parsed.amount_usdc} USDC to ${parsed.recipient}`);
+  } else {
+    console.log(`  → Swap 0.0001 ETH to USDC`);
+  }
+
   const resolved = await resolveAgent(API_BASE, PERMISSION_ID);
-  printAgentContext(resolved);
+
+  if (parsed.intent === "transfer_usdc") {
+    const amountUnits = parseUnits(parsed.amount_usdc, USDC_DECIMALS);
+    const autonomous = resolved.usdcAllowanceUnits === null
+      ? true
+      : amountUnits <= resolved.usdcAllowanceUnits;
+
+    if (autonomous) {
+      console.log("  ✓ Within your spend limit — executing now…");
+    } else {
+      console.log("  ⚠ This exceeds your spend limit.");
+      console.log("  Sending approval request to the Signet dashboard…");
+      console.log(`  Open ${API_BASE} → Monitor tab → Approve & Sign on Ledger`);
+    }
+
+    await runUsdcTransfer({
+      jawApiKey: JAW_API_KEY,
+      spenderPk: SPENDER_PK,
+      permissionId: PERMISSION_ID,
+      apiBase: API_BASE,
+      recipient: parsed.recipient,
+      amountUnits,
+      description: `AI agent: send ${parsed.amount_usdc} USDC → ${parsed.recipient.slice(0, 10)}… (${parsed.reasoning})`,
+      useAutonomous: autonomous,
+    });
+    return;
+  }
 
   if (parsed.intent === "transfer_eth") {
     const amountWei = parseEther(parsed.amount_eth);
-    const autonomous = withinDbNativeSpendHint(
-      amountWei,
-      resolved.nativeAllowanceWei,
-    );
-    if (!autonomous) {
-      console.log(
-        "\n⚠ Requested",
-        parsed.amount_eth,
-        "ETH exceeds DB-recorded native allowance → signature_request path.",
-      );
-    } else {
-      console.log("\n✓ Within DB native spend hint → autonomous path.");
-    }
+    const autonomous = withinDbNativeSpendHint(amountWei, resolved.nativeAllowanceWei);
 
-    const description = `AI agent: send ${parsed.amount_eth} ETH → ${parsed.recipient.slice(0, 10)}… (${parsed.reasoning})`;
+    if (autonomous) {
+      console.log("  ✓ Within your spend limit — executing now…");
+    } else {
+      console.log("  ⚠ This exceeds your spend limit.");
+      console.log("  Sending approval request to the Signet dashboard…");
+      console.log(`  Open ${API_BASE} → Monitor tab → Approve & Sign on Ledger`);
+    }
 
     await runEthTransfer({
       jawApiKey: JAW_API_KEY,
@@ -176,21 +179,22 @@ async function runOnce(userText: string): Promise<void> {
       apiBase: API_BASE,
       recipient: parsed.recipient,
       amountWei,
-      description,
+      description: `AI agent: send ${parsed.amount_eth} ETH → ${parsed.recipient.slice(0, 10)}… (${parsed.reasoning})`,
       useAutonomous: autonomous,
     });
     return;
   }
 
-  // swap_eth_to_usdc — fixed size
+  // swap_eth_to_usdc
   const swapWei = parseEther("0.0001");
   const autonomous = withinDbNativeSpendHint(swapWei, resolved.nativeAllowanceWei);
-  if (!autonomous) {
-    console.log(
-      "\n⚠ Swap uses 0.0001 ETH — over DB native allowance → signature_request path.",
-    );
+
+  if (autonomous) {
+    console.log("  ✓ Within your spend limit — executing swap now…");
   } else {
-    console.log("\n✓ Swap within DB native spend hint → autonomous path.");
+    console.log("  ⚠ This exceeds your spend limit.");
+    console.log("  Sending approval request to the Signet dashboard…");
+    console.log(`  Open ${API_BASE} → Monitor tab → Approve & Sign on Ledger`);
   }
 
   await runSwapEthToUsdc({
@@ -204,27 +208,27 @@ async function runOnce(userText: string): Promise<void> {
 }
 
 async function runRepl(): Promise<void> {
-  console.log("══ Signet AI Agent REPL (Base Sepolia) ══");
-  console.log("Commands: plain English — e.g. 'send 0.001 ETH to 0x...'");
-  console.log("          'swap eth to usdc'");
-  console.log("Type 'exit' or 'quit' to stop.\n");
+  console.log("┌─────────────────────────────────────────┐");
+  console.log("│       Signet AI Agent  ·  Base Sepolia  │");
+  console.log("└─────────────────────────────────────────┘");
+  console.log("  Try: 'send 0.001 ETH to 0x...'");
+  console.log("       'send 10 USDC to 0x...'");
+  console.log("       'swap eth to usdc'");
+  console.log("  Type 'exit' to quit.\n");
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: "> ",
+    prompt: "you > ",
   });
 
   rl.prompt();
 
   for await (const line of rl) {
     const input = line.trim();
-    if (!input) {
-      rl.prompt();
-      continue;
-    }
+    if (!input) { rl.prompt(); continue; }
     if (input === "exit" || input === "quit") {
-      console.log("Goodbye.");
+      console.log("  Goodbye.");
       rl.close();
       break;
     }
@@ -233,7 +237,7 @@ async function runRepl(): Promise<void> {
       await runOnce(input);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("\n✗", msg);
+      console.error(`  ✗ Error: ${msg}`);
     }
 
     console.log();
@@ -242,24 +246,20 @@ async function runRepl(): Promise<void> {
 }
 
 async function main() {
-  if (!OPENAI_KEY) throw new Error("Set OPEN_AI_API_KEY or OPENAI_API_KEY");
-  if (!JAW_API_KEY) throw new Error("NEXT_PUBLIC_JAW_API_KEY not set");
-  if (!SPENDER_PK) throw new Error("SPENDER_PRIVATE_KEY not set");
-  if (!PERMISSION_ID) throw new Error("PERMISSION_ID not set");
+  if (!OPENAI_KEY)    throw new Error("OPEN_AI_API_KEY is not set");
+  if (!JAW_API_KEY)   throw new Error("NEXT_PUBLIC_JAW_API_KEY is not set");
+  if (!SPENDER_PK)    throw new Error("SPENDER_PRIVATE_KEY is not set");
+  if (!PERMISSION_ID) throw new Error("PERMISSION_ID is not set");
 
   const argv = process.argv.slice(2).join(" ").trim();
-
   if (argv) {
-    // Single-shot mode (original behaviour)
-    console.log("══ OpenAI permission agent (Base Sepolia) ══\n");
     await runOnce(argv);
   } else {
-    // REPL mode
     await runRepl();
   }
 }
 
 main().catch((err) => {
-  console.error("\n✗", err.message ?? err);
+  console.error(`\n  ✗ ${err.message ?? err}`);
   process.exit(1);
 });
