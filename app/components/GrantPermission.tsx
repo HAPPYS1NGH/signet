@@ -90,11 +90,15 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
       const callSelector = callSelectorPreset || callSelectorCustom;
       const spendToken = spendTokenPreset || spendTokenCustom;
 
+      // Use EMPTY_CALLDATA_FN_SEL (0xe0e0e0e0) for plain ETH transfers (empty calldata)
+      // The PermissionsManager contract requires this specific selector for empty calldata
+      const effectiveSelector = callSelector || (callTarget ? EMPTY_CALLDATA_FN_SEL : "0xe0e0e0e0");
+
       const params: GrantPermissionParams = {
         spender: spender as Address,
         expiry: Math.floor(Date.now() / 1000) + Number(expiryHours) * 3600,
         calls: callTarget
-          ? [{ target: callTarget as Address, selector: (callSelector || "0x00000000") as Hex }]
+          ? [{ target: callTarget as Address, selector: effectiveSelector as Hex }]
           : [],
         spends: spendAllowance && Number(spendAllowance) > 0
           ? [{
@@ -104,6 +108,16 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
             }]
           : [],
       };
+
+      // Log all params before building permission
+      console.log("[GrantPermission] === PRE-BUILD PARAMS ===");
+      console.log("[GrantPermission] callTarget:", callTarget);
+      console.log("[GrantPermission] callSelector:", callSelector);
+      console.log("[GrantPermission] effectiveSelector:", effectiveSelector);
+      console.log("[GrantPermission] spendToken:", spendToken);
+      console.log("[GrantPermission] spendAllowance:", spendAllowance);
+      console.log("[GrantPermission] spendPeriod:", spendPeriod);
+      console.log("[GrantPermission] GrantPermissionParams:", JSON.stringify(params, (_, v) => typeof v === "bigint" ? v.toString() : v, 2));
 
       // Build permission struct
       console.log("[GrantPermission] Building permission struct...");
@@ -200,33 +214,34 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
         // Register agent in DB with full permission details
         console.log("[GrantPermission] Registering agent in DB...");
         try {
+          const dbPayload = {
+            account: eoaAddress,
+            agentAddress: spender,
+            permissionId: pid,
+            delegationTxHash: receipt?.receipt?.transactionHash ?? null,
+            permission: {
+              account: eoaAddress,
+              spender,
+              start: Math.floor(Date.now() / 1000),
+              end: params.expiry,
+              calls: params.calls.map((c) => ({
+                target: c.target,
+                selector: c.selector,
+              })),
+              spends: params.spends.map((s) => ({
+                token: s.token,
+                allowance: s.allowance.toString(),
+                unit: s.unit,
+                multiplier: s.multiplier ?? 1,
+              })),
+            },
+          };
+          console.log("[GrantPermission] === DB REGISTRATION PAYLOAD ===");
+          console.log(JSON.stringify(dbPayload, null, 2));
           const regRes = await fetch("/api/agents/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              account: eoaAddress,
-              agentAddress: spender,
-              permissionId: pid,
-              delegationTxHash: receipt?.receipt?.transactionHash ?? null,
-              permission: {
-                account: eoaAddress,
-                spender,
-                start: Math.floor(Date.now() / 1000),
-                end: params.expiry,
-                salt: "0x0", // actual salt is on-chain, this is for reference
-                calls: params.calls.map((c) => ({
-                  target: c.target,
-                  selector: c.selector,
-                  checker: "0x0000000000000000000000000000000000000000",
-                })),
-                spends: params.spends.map((s) => ({
-                  token: s.token,
-                  allowance: s.allowance.toString(),
-                  unit: s.unit,
-                  multiplier: s.multiplier ?? 1,
-                })),
-              },
-            }),
+            body: JSON.stringify(dbPayload),
           });
           const regData = await regRes.json();
           if (regRes.ok) {
