@@ -252,43 +252,59 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
 
   const isRunning = !["idle", "done", "error"].includes(step);
 
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-      <h2 className="mb-4 text-sm font-semibold text-zinc-100">Grant Permission</h2>
+  const inputClass = "w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition-colors focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/10";
+  const selectClass = "w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-zinc-200 outline-none transition-colors focus:border-orange-500/30 cursor-pointer";
+  const labelClass = "text-[11px] font-medium uppercase tracking-wider text-zinc-500";
 
-      <div className="flex flex-col gap-3">
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.04] to-white/[0.01] p-6">
+      <div className="flex flex-col gap-5">
+        {/* Agent Address */}
         <label className="block">
-          <span className="text-xs text-zinc-500">Spender Address</span>
+          <span className={labelClass}>Agent wallet address</span>
+          <p className="mb-1.5 text-[10px] text-zinc-600">The EOA that will execute transactions on your behalf</p>
           <input
             type="text"
             value={spender}
             onChange={(e) => setSpender(e.target.value)}
-            placeholder="0x... (who gets the permission)"
-            className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-white/20"
+            placeholder="0x..."
+            className={inputClass + " font-mono"}
           />
         </label>
 
+        {/* Expiry */}
         <label className="block">
-          <span className="text-xs text-zinc-500">Expiry (hours from now)</span>
+          <span className={labelClass}>Permission duration</span>
+          <p className="mb-1.5 text-[10px] text-zinc-600">How long this permission remains valid (in hours)</p>
           <input
             type="number"
             value={expiryHours}
             onChange={(e) => setExpiryHours(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-200 outline-none focus:border-white/20"
+            className={inputClass}
           />
         </label>
 
-        <div className="border-t border-white/5 pt-3">
-          <p className="mb-2 text-xs font-medium text-zinc-400">Call Permission (optional)</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
+        {/* Call Restrictions */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            </svg>
+            <div>
+              <p className="text-xs font-semibold text-zinc-300">Call Restrictions</p>
+              <p className="text-[10px] text-zinc-600">Limit which contracts and functions the agent can call</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Target contract</span>
               <select
                 value={callTargetPreset}
                 onChange={(e) => {
                   setCallTargetPreset(e.target.value);
                   if (e.target.value) setCallTargetCustom("");
                 }}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+                className={selectClass}
               >
                 {TARGET_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -299,19 +315,20 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
                   type="text"
                   value={callTargetCustom}
                   onChange={(e) => setCallTargetCustom(e.target.value)}
-                  placeholder="0x... target contract"
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                  placeholder="0x... contract address"
+                  className={inputClass + " font-mono"}
                 />
               )}
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Function selector</span>
               <select
                 value={callSelectorPreset}
                 onChange={(e) => {
                   setCallSelectorPreset(e.target.value);
                   if (e.target.value) setCallSelectorCustom("");
                 }}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+                className={selectClass}
               >
                 {SELECTOR_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -323,43 +340,59 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
                   value={callSelectorCustom}
                   onChange={(e) => setCallSelectorCustom(e.target.value)}
                   placeholder="0xa9059cbb"
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                  className={inputClass + " font-mono"}
                 />
               )}
             </div>
           </div>
         </div>
 
-        <div className="border-t border-white/5 pt-3">
-          <p className="mb-2 text-xs font-medium text-zinc-400">Spend Limit (optional)</p>
-          <div className="grid grid-cols-3 gap-2">
-            <input
-              type="text"
-              value={spendAllowance}
-              onChange={(e) => setSpendAllowance(e.target.value)}
-              placeholder="Amount (ETH)"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
-            />
-            <select
-              value={spendPeriod}
-              onChange={(e) => setSpendPeriod(e.target.value as SpendPeriod)}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
-            >
-              <option value="minute">Per Minute</option>
-              <option value="hour">Per Hour</option>
-              <option value="day">Per Day</option>
-              <option value="week">Per Week</option>
-              <option value="month">Per Month</option>
-              <option value="forever">Forever</option>
-            </select>
-            <div className="flex flex-col gap-1">
+        {/* Spend Limit */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="h-4 w-4 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <div>
+              <p className="text-xs font-semibold text-zinc-300">Spend Limit</p>
+              <p className="text-[10px] text-zinc-600">Cap how much value the agent can transfer per period</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Amount</span>
+              <input
+                type="text"
+                value={spendAllowance}
+                onChange={(e) => setSpendAllowance(e.target.value)}
+                placeholder="0.01"
+                className={inputClass}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Period</span>
+              <select
+                value={spendPeriod}
+                onChange={(e) => setSpendPeriod(e.target.value as SpendPeriod)}
+                className={selectClass}
+              >
+                <option value="minute">Per Minute</option>
+                <option value="hour">Per Hour</option>
+                <option value="day">Per Day</option>
+                <option value="week">Per Week</option>
+                <option value="month">Per Month</option>
+                <option value="forever">One-time</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className={labelClass}>Token</span>
               <select
                 value={spendTokenPreset}
                 onChange={(e) => {
                   setSpendTokenPreset(e.target.value);
                   if (e.target.value) setSpendTokenCustom("");
                 }}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 outline-none"
+                className={selectClass}
               >
                 {TOKEN_PRESETS.map((p) => (
                   <option key={p.value || "custom"} value={p.value}>{p.label}</option>
@@ -370,8 +403,8 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
                   type="text"
                   value={spendTokenCustom}
                   onChange={(e) => setSpendTokenCustom(e.target.value)}
-                  placeholder="0x... token address"
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none"
+                  placeholder="0x... ERC-20 address"
+                  className={inputClass + " font-mono"}
                 />
               )}
             </div>
@@ -382,40 +415,51 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
       <button
         onClick={handleGrant}
         disabled={isRunning || !spender}
-        className={`mt-4 rounded-xl px-5 py-2.5 text-sm font-medium transition-all ${
+        className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-all cursor-pointer ${
           isRunning
-            ? "cursor-wait bg-white/5 text-zinc-500"
+            ? "cursor-wait bg-white/[0.04] text-zinc-500"
             : !spender
-              ? "cursor-not-allowed bg-white/5 text-zinc-600"
-              : "bg-violet-500/20 text-violet-300 hover:bg-violet-500/30"
+              ? "cursor-not-allowed bg-white/[0.04] text-zinc-600"
+              : "bg-gradient-to-r from-orange-500 to-amber-500 text-zinc-950 hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] active:scale-[0.99]"
         }`}
       >
-        {isRunning ? "Processing..." : "Grant Permission"}
+        {isRunning ? (
+          <>
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {step === "signing" ? "Confirm on your Ledger..." : step === "building" ? "Building transaction..." : step === "estimating" ? "Estimating gas..." : step === "submitting" ? "Submitting..." : "Waiting for confirmation..."}
+          </>
+        ) : (
+          <>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+            </svg>
+            Sign & Grant Permission
+          </>
+        )}
       </button>
 
-      {isRunning && (
-        <div className="mt-4 flex items-center gap-2 text-sm text-amber-400">
-          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          {step === "signing" ? "Confirm on Ledger..." : `${step}...`}
-        </div>
-      )}
-
       {step === "done" && (
-        <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-          <p className="text-sm text-emerald-400">Permission granted!</p>
+        <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <p className="text-sm font-semibold text-emerald-400">Permission granted successfully</p>
+          </div>
           {agentId && (
-            <div className="mt-2">
-              <p className="text-xs text-zinc-500">Agent ID (give this to your agent)</p>
-              <div className="mt-1 flex items-center gap-2">
-                <code className="flex-1 break-all rounded bg-white/5 px-3 py-2 font-mono text-xs text-amber-400">
+            <div className="mt-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Agent ID</p>
+              <p className="mt-0.5 text-[10px] text-zinc-600">Share this with your agent to start operating</p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-black/30 px-3 py-2.5 font-mono text-xs text-amber-400 ring-1 ring-white/[0.06]">
                   {agentId}
                 </code>
                 <button
                   onClick={() => navigator.clipboard.writeText(agentId)}
-                  className="shrink-0 rounded-lg bg-white/5 px-3 py-2 text-xs text-zinc-400 hover:bg-white/10"
+                  className="shrink-0 rounded-lg bg-white/[0.06] px-3 py-2.5 text-xs text-zinc-400 transition-colors hover:bg-white/[0.1] hover:text-zinc-300 cursor-pointer"
                 >
                   Copy
                 </button>
@@ -423,21 +467,24 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
             </div>
           )}
           {permissionId && (
-            <div className="mt-2">
-              <p className="text-xs text-zinc-500">Permission ID</p>
-              <p className="mt-0.5 break-all font-mono text-xs text-violet-400">{permissionId}</p>
+            <div className="mt-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Permission ID</p>
+              <p className="mt-1 break-all font-mono text-xs text-orange-400/80">{permissionId}</p>
             </div>
           )}
           {txHash && (
-            <div className="mt-2">
-              <p className="text-xs text-zinc-500">Transaction</p>
+            <div className="mt-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Transaction</p>
               <a
                 href={`https://sepolia.basescan.org/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 block break-all font-mono text-xs text-indigo-400 hover:text-indigo-300"
+                className="mt-1 flex items-center gap-1.5 break-all font-mono text-xs text-indigo-400 transition-colors hover:text-indigo-300"
               >
                 {txHash}
+                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
               </a>
             </div>
           )}
@@ -445,7 +492,10 @@ export function GrantPermission({ onAgentRegistered }: GrantPermissionProps = {}
       )}
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+        <div className="mt-5 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.04] px-4 py-3 text-sm text-red-400">
+          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
           {error}
         </div>
       )}

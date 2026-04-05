@@ -188,36 +188,46 @@ export function SignetDashboard() {
               <div className="flex gap-1 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1">
                 <button
                   onClick={() => setView("agents")}
-                  className={`rounded-lg px-5 py-2 text-xs font-medium transition-all ${
+                  className={`flex items-center gap-2 rounded-lg px-5 py-2 text-xs font-medium transition-all cursor-pointer ${
                     view === "agents"
-                      ? "bg-white/[0.08] text-zinc-100"
+                      ? "bg-white/[0.08] text-zinc-100 shadow-sm"
                       : "text-zinc-500 hover:text-zinc-400"
                   }`}
                 >
-                  Your Agents
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  Monitor
                   {agents.length > 0 && (
-                    <span className="ml-2 rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] text-orange-400">
+                    <span className="rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-400">
                       {agents.filter((a) => a.status === "active").length}
                     </span>
                   )}
                 </button>
                 <button
                   onClick={() => setView("grant")}
-                  className={`rounded-lg px-5 py-2 text-xs font-medium transition-all ${
+                  className={`flex items-center gap-2 rounded-lg px-5 py-2 text-xs font-medium transition-all cursor-pointer ${
                     view === "grant"
-                      ? "bg-white/[0.08] text-zinc-100"
+                      ? "bg-white/[0.08] text-zinc-100 shadow-sm"
                       : "text-zinc-500 hover:text-zinc-400"
                   }`}
                 >
-                  Grant Permission
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  New Permission
                 </button>
               </div>
 
               <button
                 onClick={() => setShowDeviceInfo(!showDeviceInfo)}
-                className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-600 transition-colors hover:bg-white/[0.06] hover:text-zinc-400 cursor-pointer"
               >
-                {showDeviceInfo ? "Hide device" : "Device info"}
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                </svg>
+                {showDeviceInfo ? "Hide" : "Device"}
               </button>
             </div>
 
@@ -237,35 +247,37 @@ export function SignetDashboard() {
                   </div>
                 ) : agents.length === 0 ? (
                   /* Empty state */
-                  <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
+                  <div className="rounded-2xl border border-dashed border-white/[0.08] bg-gradient-to-b from-white/[0.03] to-transparent p-14 text-center">
+                    <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500/[0.08] ring-1 ring-orange-500/15">
                       <svg
-                        className="h-7 w-7 text-orange-400/60"
+                        className="h-7 w-7 text-orange-400/70"
                         fill="none"
                         viewBox="0 0 24 24"
                         strokeWidth={1.5}
                         stroke="currentColor"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
-                        />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                       </svg>
+                      <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-950 ring-2 ring-orange-500/20">
+                        <svg className="h-3.5 w-3.5 text-orange-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                      </div>
                     </div>
-                    <h3 className="font-[var(--font-syne)] text-base font-bold">
-                      No agents yet
+                    <h3 className="font-[var(--font-syne)] text-lg font-bold text-zinc-100">
+                      No agents delegated
                     </h3>
-                    <p className="mt-2 text-sm text-zinc-500">
-                      Grant a scoped permission to your first AI agent.
-                      <br />
-                      You define the rules — the blockchain enforces them.
+                    <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-zinc-500">
+                      Grant scoped permissions to an AI agent. You set the rules, the blockchain enforces them.
                     </p>
                     <button
                       onClick={() => setView("grant")}
-                      className="mt-6 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-2.5 text-sm font-semibold text-zinc-950 transition-all hover:shadow-[0_0_30px_rgba(249,115,22,0.2)]"
+                      className="mt-7 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-2.5 text-sm font-semibold text-zinc-950 transition-all hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] active:scale-[0.98] cursor-pointer"
                     >
-                      Grant first permission
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      Delegate First Agent
                     </button>
                   </div>
                 ) : (
@@ -277,14 +289,22 @@ export function SignetDashboard() {
             {/* Grant Permission view */}
             {view === "grant" && (
               <div className="flex flex-col gap-6">
-                <div className="rounded-2xl border border-orange-500/10 bg-orange-500/[0.02] p-6">
-                  <h2 className="font-[var(--font-syne)] text-base font-bold">
-                    Grant agent permission
-                  </h2>
-                  <p className="mt-1 text-sm text-zinc-500">
-                    Define what your agent can do. Every scope is enforced
-                    on-chain — the agent can only operate within these bounds.
-                  </p>
+                <div className="rounded-2xl border border-orange-500/10 bg-gradient-to-br from-orange-500/[0.04] to-transparent p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                      <svg className="h-5 w-5 text-orange-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="font-[var(--font-syne)] text-base font-bold text-zinc-100">
+                        Delegate a New Permission
+                      </h2>
+                      <p className="mt-1 text-sm leading-relaxed text-zinc-500">
+                        Scope exactly what your agent can do. Call targets, function selectors, and spend limits are all enforced on-chain.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <GrantPermission
